@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:gym_tracker/state/training_state.dart';
-import 'package:gym_tracker/repositories/gym_repository.dart';
-import 'package:gym_tracker/screens/history_screen.dart';
 import 'package:gym_tracker/screens/active_workout_screen.dart';
+import 'package:gym_tracker/screens/exercises_screen.dart';
+import 'package:gym_tracker/screens/history_screen.dart';
 import 'package:gym_tracker/screens/profile_screen.dart';
 
 /// Main application screen with bottom navigation
@@ -20,6 +18,7 @@ class _MainScreenState extends State<MainScreen> {
   /// Navigation destinations
   static const List<Widget> _screens = [
     ActiveWorkoutScreen(),
+    ExercisesScreen(),
     HistoryScreen(),
     ProfileScreen(),
   ];
@@ -27,7 +26,11 @@ class _MainScreenState extends State<MainScreen> {
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(
       icon: Icon(Icons.fitness_center),
-      label: 'Active Workout',
+      label: 'Workout',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.sports_gymnastics),
+      label: 'Exercises',
     ),
     BottomNavigationBarItem(
       icon: Icon(Icons.history),
@@ -58,6 +61,7 @@ class _MainScreenState extends State<MainScreen> {
         items: _navItems,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,

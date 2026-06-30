@@ -18,10 +18,15 @@ class WeightTraining {
     required this.sets,
   });
 
+  /// Parses a date string that may be in YYYY/MM/DD or ISO 8601 format
+  static DateTime _parseDate(String dateStr) {
+    return DateTime.parse(dateStr.replaceAll('/', '-'));
+  }
+
   /// Converts a WeightTraining object to a Map for database operations
   Map<String, dynamic> toMap() {
     return {
-      'Date': date.toIso8601String(),
+      'Date': '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}',
       'TrainingStyle': trainingStyle,
       'Exercises': exercises,
       'Weight': weight,
@@ -34,7 +39,7 @@ class WeightTraining {
   factory WeightTraining.fromMap(Map<String, dynamic> map) {
     return WeightTraining(
       id: map['ID'] as int?,
-      date: DateTime.parse(map['Date'] as String),
+      date: _parseDate(map['Date'] as String),
       trainingStyle: map['TrainingStyle'] as String,
       exercises: map['Exercises'] as String,
       weight: map['Weight'] as String,

@@ -1,0 +1,48 @@
+# Gym Tracker - Cline Rules 
+ 
+## Project Overview 
+Flutter-based fitness tracking app using SQLite, Provider state management, and clean architecture with repository pattern. 
+ 
+## Tech Stack 
+- Flutter / Dart (SDK 3.11.1) 
+- SQLite via sqflite + sqflite_common_ffi (desktop) 
+- Provider for state management 
+- Target: Windows, macOS, Linux, Android, iOS (NOT web/Edge - deprecated) 
+ 
+## Database Conventions 
+- All dates stored as YYYY/MM/DD text format (NOT ISO 8601) 
+- toMap() outputs YYYY/MM/DD format 
+- fromMap() uses _parseDate() to normalise slashes to dashes 
+- Database version 2 (RunTime added via ALTER TABLE) 
+- DatabaseHelper uses singleton pattern 
+ 
+## Training Style Independence 
+- WEIGHT_TRAINING stores separate rows for Hypertrophy and Strength 
+- getLatestWeightForExercise(exercise, [trainingStyle]) filters by style 
+- Adding exercise with different style = NEW row (INSERT, never UPDATE) 
+- EXERCISE_BODY_PARTS is style-independent 
+ 
+## UI Patterns 
+- Provider.of for data access (listen: false for async) 
+- Lists in reverse chronological order (orderBy: Date DESC) 
+- Dialogs for add/edit, PopupMenuItem for delete/modify 
+- FilterChip for multi-select, ExpansionTile for grouped display 
+- SingleChildScrollView for forms, error states with retry 
+ 
+## Build Notes 
+- Run flutter clean before flutter run if CMake cache errors occur 
+- Web/Edge deprecated - do not add web-specific code 
+- geolocator removed (blocked Windows) - do not re-add until GPS feature
+- health package removed (was unused) - do not re-add until Health Connect feature
+- sqflite_common_ffi_web removed (web deprecated) 
+ 
+## Code Style 
+- Use write_to_file for new files, replace_in_file for small edits 
+- Use Python via execute_command when replace_in_file fails 
+- Always verify with flutter analyze and flutter test 
+- Keep warnings to zero (info-level lints acceptable) 
+ 
+## Versioning 
+- v0: Initial working version (current) 
+- Update README.md and STATUS.md when introducing new versions 
+- Version format: MAJOR.MINOR.PATCH in pubspec.yaml

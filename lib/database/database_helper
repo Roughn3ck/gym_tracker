@@ -1,13 +1,15 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 /// Database helper class for managing SQLite database operations
 class DatabaseHelper {
   static const String _databaseName = 'kris_gym.db';
-  static const int _databaseVersion = 2;
+  static const int _databaseVersion = 1;
 
   // Singleton instance
   static Database? _database;
@@ -29,8 +31,69 @@ class DatabaseHelper {
 
   /// Initialize the database
   Future<Database> _initDatabase() async {
+    // On web, use the sqflite_common_ffi_web factory.
     // On desktop platforms (Windows, macOS, Linux), sqflite needs the FFI
     // implementation. On mobile (Android/iOS) the default factory works.
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+      // On web, the database starts empty. Tables are created via onOpen
+      // with IF NOT EXISTS so it works on first run and subsequent runs.
+      return await openDatabase(
+        _databaseName,
+        version: _databaseVersion,
+        onOpen: (db) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS SESSIONS (
+              ID INTEGER PRIMARY KEY AUTOINCREMENT,
+              Date TEXT NOT NULL UNIQUE,
+              BodyPart TEXT,
+              RunDuration REAL,
+              SaunaDuration INTEGER,
+              BodyWeight REAL,
+              TrainingStyle TEXT,
+              Other TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS BODY_STATS (
+              ID INTEGER PRIMARY KEY AUTOINCREMENT,
+              Date TEXT NOT NULL UNIQUE,
+              Weight_kg REAL,
+              Waist_inches REAL,
+              Neck_inches REAL,
+              Notes TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS BODY_PARTS (
+              ID INTEGER PRIMARY KEY AUTOINCREMENT,
+              Name TEXT NOT NULL UNIQUE
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS EXERCISE_BODY_PARTS (
+              Exercise TEXT,
+              BodyPart TEXT,
+              PRIMARY KEY (Exercise, BodyPart)
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS WEIGHT_TRAINING (
+              ID INTEGER PRIMARY KEY AUTOINCREMENT,
+              Date TEXT,
+              TrainingStyle TEXT,
+              Exercises TEXT,
+              Weight TEXT,
+              Reps INTEGER,
+              Sets INTEGER
+            )
+          ''');
+          await db.execute('PRAGMA foreign_keys = ON');
+        },
+      );
+    }
+
+    // Desktop and mobile: use FFI for desktop, default for mobile
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
@@ -58,22 +121,10 @@ class DatabaseHelper {
       path,
       version: _databaseVersion,
       onOpen: (db) async {
-        // Add RunTime column if it doesn't exist (migration from v1)
-        try {
-          await db.execute('ALTER TABLE SESSIONS ADD COLUMN RunTime INTEGER');
-        } catch (_) {
-          // Column already exists — ignore
-        }
+        // Verify database integrity
         await db.execute('PRAGMA foreign_keys = ON');
       },
     );
-  }
-
-  /// Get the database file path (for export)
-  Future<String?> getDatabasePath() async {
-    final databasesPath = await getDatabasesPath();
-    final path = join(databasesPath, _databaseName);
-    return path;
   }
 
   /// Close the database connection

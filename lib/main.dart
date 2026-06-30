@@ -4,6 +4,10 @@ import 'package:gym_tracker/repositories/gym_repository.dart';
 import 'package:gym_tracker/state/training_state.dart';
 import 'package:gym_tracker/screens/main_screen.dart';
 
+// Note: GymRepository is a plain class (not a ChangeNotifier), so it is
+// registered via Provider. TrainingState extends ChangeNotifier and uses
+// ChangeNotifierProvider.
+
 void main() {
   runApp(const GymTrackerApp());
 }
@@ -15,7 +19,7 @@ class GymTrackerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => GymRepository()),
+        Provider(create: (context) => GymRepository()),
         ChangeNotifierProvider(create: (context) => TrainingState()),
       ],
       child: MaterialApp(

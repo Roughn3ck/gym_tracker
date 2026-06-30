@@ -19,7 +19,7 @@ class BodyStat {
   /// Converts a BodyStat object to a Map for database operations
   Map<String, dynamic> toMap() {
     return {
-      'Date': date.toIso8601String(),
+      'Date': '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}',
       'Weight_kg': weightKg,
       'Waist_inches': waistInches,
       'Neck_inches': neckInches,
@@ -27,11 +27,18 @@ class BodyStat {
     };
   }
 
+  /// Parses a date string that may be in YYYY/MM/DD or ISO 8601 format
+  static DateTime _parseDate(String dateStr) {
+    // The database stores dates as YYYY/MM/DD; DateTime.parse expects
+    // ISO 8601 (YYYY-MM-DD), so normalise slashes to dashes.
+    return DateTime.parse(dateStr.replaceAll('/', '-'));
+  }
+
   /// Creates a BodyStat object from a database Map
   factory BodyStat.fromMap(Map<String, dynamic> map) {
     return BodyStat(
       id: map['ID'] as int?,
-      date: DateTime.parse(map['Date'] as String),
+      date: _parseDate(map['Date'] as String),
       weightKg: map['Weight_kg'] as double?,
       waistInches: map['Waist_inches'] as double?,
       neckInches: map['Neck_inches'] as double?,

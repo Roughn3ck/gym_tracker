@@ -1,11 +1,10 @@
-import 'package:sqflite/sqflite.dart';
-
 /// Represents a workout session with comprehensive tracking data
 class Session {
   final int? id;
   final DateTime date;
   final String? bodyPart;
-  final double? runDuration; // in minutes
+  final double? runDuration; // run distance in km
+  final int? runTime; // run time in minutes
   final int? saunaDuration; // in minutes
   final double? bodyWeight; // in kg
   final String? trainingStyle;
@@ -16,18 +15,25 @@ class Session {
     required this.date,
     this.bodyPart,
     this.runDuration,
+    this.runTime,
     this.saunaDuration,
     this.bodyWeight,
     this.trainingStyle,
     this.other,
   });
 
+  /// Parses a date string that may be in YYYY/MM/DD or ISO 8601 format
+  static DateTime _parseDate(String dateStr) {
+    return DateTime.parse(dateStr.replaceAll('/', '-'));
+  }
+
   /// Converts a Session object to a Map for database operations
   Map<String, dynamic> toMap() {
     return {
-      'Date': date.toIso8601String(),
+      'Date': '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}',
       'BodyPart': bodyPart,
       'RunDuration': runDuration,
+      'RunTime': runTime,
       'SaunaDuration': saunaDuration,
       'BodyWeight': bodyWeight,
       'TrainingStyle': trainingStyle,
@@ -39,9 +45,10 @@ class Session {
   factory Session.fromMap(Map<String, dynamic> map) {
     return Session(
       id: map['ID'] as int?,
-      date: DateTime.parse(map['Date'] as String),
+      date: _parseDate(map['Date'] as String),
       bodyPart: map['BodyPart'] as String?,
       runDuration: map['RunDuration'] as double?,
+      runTime: map['RunTime'] as int?,
       saunaDuration: map['SaunaDuration'] as int?,
       bodyWeight: map['BodyWeight'] as double?,
       trainingStyle: map['TrainingStyle'] as String?,
@@ -55,6 +62,7 @@ class Session {
     DateTime? date,
     String? bodyPart,
     double? runDuration,
+    int? runTime,
     int? saunaDuration,
     double? bodyWeight,
     String? trainingStyle,
@@ -65,6 +73,7 @@ class Session {
       date: date ?? this.date,
       bodyPart: bodyPart ?? this.bodyPart,
       runDuration: runDuration ?? this.runDuration,
+      runTime: runTime ?? this.runTime,
       saunaDuration: saunaDuration ?? this.saunaDuration,
       bodyWeight: bodyWeight ?? this.bodyWeight,
       trainingStyle: trainingStyle ?? this.trainingStyle,
@@ -74,7 +83,7 @@ class Session {
 
   @override
   String toString() {
-    return 'Session(id: $id, date: $date, bodyPart: $bodyPart, runDuration: $runDuration, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
+    return 'Session(id: $id, date: $date, bodyPart: $bodyPart, runDuration: $runDuration, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
   }
 
   @override
@@ -86,6 +95,7 @@ class Session {
         other.date == date &&
         other.bodyPart == bodyPart &&
         other.runDuration == runDuration &&
+        other.runTime == runTime &&
         other.saunaDuration == saunaDuration &&
         other.bodyWeight == bodyWeight &&
         other.trainingStyle == trainingStyle &&
@@ -98,6 +108,7 @@ class Session {
         date.hashCode ^
         bodyPart.hashCode ^
         runDuration.hashCode ^
+        runTime.hashCode ^
         saunaDuration.hashCode ^
         bodyWeight.hashCode ^
         trainingStyle.hashCode ^

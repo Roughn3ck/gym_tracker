@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:gym_tracker/repositories/gym_repository.dart';
 import 'package:gym_tracker/models/session.dart';
-import 'package:gym_tracker/models/weight_training.dart';
 
 /// Screen for viewing workout history
 class HistoryScreen extends StatefulWidget {
@@ -79,9 +78,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               children: [
                                 const SizedBox(height: 4),
                                 Text('Date: ${_formatDate(session.date)}'),
-                                Text('Duration: ${session.duration} minutes'),
-                                Text('Type: ${session.sessionType}'),
-                                Text('Notes: ${session.notes}'),
+                                if (session.bodyPart != null)
+                                  Text('Body Part: ${session.bodyPart}'),
+                                if (session.trainingStyle != null)
+                                  Text('Style: ${session.trainingStyle}'),
+                                if (session.runDuration != null)
+                                  Text('Run: ${session.runDuration} km'),
+                                if (session.runTime != null)
+                                  Text('Run Time: ${session.runTime} min'),
+                                if (session.saunaDuration != null)
+                                  Text('Sauna: ${session.saunaDuration} min'),
+                                if (session.bodyWeight != null)
+                                  Text('Body Weight: ${session.bodyWeight} kg'),
+                                if (session.other != null &&
+                                    session.other!.isNotEmpty)
+                                  Text('Notes: ${session.other}'),
                               ],
                             ),
                             trailing: const Icon(Icons.chevron_right),
@@ -94,8 +105,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
       floatingActionButton: FloatingActionButton(
         onPressed: _loadHistory,
-        child: const Icon(Icons.refresh),
         tooltip: 'Refresh history',
+        child: const Icon(Icons.refresh),
       ),
     );
   }

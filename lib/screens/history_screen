@@ -1,0 +1,205 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:gym_tracker/repositories/gym_repository.dart';
+import 'package:gym_tracker/models/session.dart';
+
+/// Screen for viewing workout history
+class HistoryScreen extends StatefulWidget {
+  const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  List<Session> _sessions = [];
+  bool _isLoading = true;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final repository = Provider.of<GymRepository>(context, listen: false);
+      final sessions = await repository.getAllSessions();
+
+      setState(() {
+        _sessions = sessions;
+        _isLoading = false;
+        _error = '';
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to load history: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _deleteSession(Session session) async {
+    if (session.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Session'),
+        content: Text('Delete the session from ${_formatDate(session.date)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    try {
+      final repository = Provider.of<GymRepository>(context, listen: false);
+      await repository.deleteSession(session.id!);
+      await _loadHistory();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error.isNotEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline,
+                            size: 48, color: Colors.red),
+                        const SizedBox(height: 12),
+                        Text(_error,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red)),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: _loadHistory,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _sessions.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No workout history yet',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(8.0),
+                      itemCount: _sessions.length,
+                      itemBuilder: (context, index) {
+                        final session = _sessions[index];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 4.0, vertical: 4.0),
+                          elevation: 1,
+                          child: ListTile(
+                            dense: true,
+                            title: Text(
+                              _formatDate(session.date),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            subtitle: Wrap(
+                              spacing: 8,
+                              children: [
+                                if (session.bodyPart != null)
+                                  Text('${session.bodyPart}'),
+                                if (session.trainingStyle != null)
+                                  Text('${session.trainingStyle}'),
+                                if (session.runDuration != null)
+                                  Text('Run: ${session.runDuration}m'),
+                                if (session.saunaDuration != null)
+                                  Text('Sauna: ${session.saunaDuration}m'),
+                                if (session.bodyWeight != null)
+                                  Text('BW: ${session.bodyWeight}kg'),
+                                if (session.other != null &&
+                                    session.other!.isNotEmpty)
+                                  Text('${session.other}'),
+                              ],
+                            ),
+                            trailing: PopupMenuButton<String>(
+                              onSelected: (value) {
+                                if (value == 'delete') {
+                                  _deleteSession(session);
+                                } else if (value == 'modify') {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'Session editing coming in Phase 2')),
+                                  );
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'modify',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit, size: 20),
+                                      SizedBox(width: 8),
+                                      Text('Modify'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete,
+                                          size: 20, color: Colors.red),
+                                      SizedBox(width: 8),
+                                      Text('Delete',
+                                          style: TextStyle(color: Colors.red)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _loadHistory,
+        tooltip: 'Refresh history',
+        child: const Icon(Icons.refresh),
+      ),
+    );
+  }
+}
