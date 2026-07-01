@@ -37,4 +37,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/databases/kris_gym.db
+    - assets/databases/gym_tracker.db

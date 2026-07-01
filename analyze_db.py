@@ -62,7 +62,7 @@ def analyze_database(db_path: str):
         print(f"Unexpected error: {e}")
 
 if __name__ == "__main__":
-    db_path = Path("assets/databases/kris_gym.db")
+    db_path = Path("assets/databases/gym_tracker.db")
     print(f"Analyzing database: {db_path}")
     print("=" * 60)
     analyze_database(str(db_path))

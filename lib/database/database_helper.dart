@@ -6,7 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 /// Database helper class for managing SQLite database operations
 class DatabaseHelper {
-  static const String _databaseName = 'kris_gym.db';
+  static const String _databaseName = 'gym_tracker.db';
   static const int _databaseVersion = 2;
 
   // Singleton instance
