@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:gym_tracker/repositories/gym_repository.dart';
@@ -18,6 +19,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   // Session data
   DateTime _selectedDate = DateTime.now();
   final Set<String> _selectedBodyParts = {};
+  final _workoutController = TextEditingController();
   final _bodyWeightController = TextEditingController();
   final _runDistanceController = TextEditingController();
   final _runTimeController = TextEditingController();
@@ -40,6 +42,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
 
   @override
   void dispose() {
+    _workoutController.dispose();
     _bodyWeightController.dispose();
     _runDistanceController.dispose();
     _runTimeController.dispose();
@@ -162,9 +165,11 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       // Multiple runs would go in notes as "Run 2: Xkm, Ymin"
 
       // Create the session
+      final workoutText = _workoutController.text.trim();
       final session = Session(
         date: _selectedDate,
-        bodyPart: _selectedBodyParts.join(', '),
+        workout: workoutText.isEmpty ? null : workoutText,
+        bodyParts: jsonEncode(_selectedBodyParts.toList()),
         runDuration: double.tryParse(_runDistanceController.text),
         runTime: int.tryParse(_runTimeController.text),
         saunaDuration: int.tryParse(_saunaController.text),
@@ -207,6 +212,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     setState(() {
       _selectedDate = DateTime.now();
       _selectedBodyParts.clear();
+      _workoutController.clear();
       _runDistanceController.clear();
       _runTimeController.clear();
       _saunaController.clear();
@@ -252,6 +258,16 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                         suffixIcon: Icon(Icons.calendar_today),
                       ),
                       child: Text(_formatDate(_selectedDate)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Workout free-text description
+                  TextFormField(
+                    controller: _workoutController,
+                    decoration: const InputDecoration(
+                      labelText: 'Workout',
+                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),

@@ -15,6 +15,7 @@ class ActiveWorkoutScreen extends StatefulWidget {
 }
 
 class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
+  // Session data
   DateTime _selectedDate = DateTime.now();
   final Set<String> _selectedBodyParts = {};
   final _bodyWeightController = TextEditingController();
@@ -23,7 +24,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   final _saunaController = TextEditingController();
   final _notesController = TextEditingController();
 
+  // Exercise data
   List<BodyPart> _allBodyParts = [];
+  List<String> _availableExercises = [];
   List<_ExerciseEntry> _exerciseEntries = [];
   Map<String, WeightTraining?> _latestWeights = {};
   double? _lastBodyWeight;
@@ -75,6 +78,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   Future<void> _onBodyPartsChanged() async {
     if (_selectedBodyParts.isEmpty) {
       setState(() {
+        _availableExercises = [];
         _exerciseEntries.clear();
       });
       return;
@@ -86,11 +90,14 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         _selectedBodyParts.toList(),
       );
 
+      // Load latest weights for these exercises
+      final trainingState = Provider.of<TrainingState>(context, listen: false);
       final latestWeights = <String, WeightTraining?>{};
       for (final name in exercises) {
-        latestWeights[name] = await repository.getLatestWeightForExercise(name);
+        latestWeights[name] = await repository.getLatestWeightForExercise(name, trainingState.currentModeName);
       }
 
+      // Build exercise entries with pre-filled data
       final entries = exercises.map((name) {
         final latest = latestWeights[name];
         return _ExerciseEntry(
@@ -101,11 +108,13 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         );
       }).toList();
 
+      // Dispose old entries
       for (final entry in _exerciseEntries) {
         entry.dispose();
       }
 
       setState(() {
+        _availableExercises = exercises;
         _latestWeights = latestWeights;
         _exerciseEntries = entries;
       });
@@ -146,8 +155,13 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     final repository = Provider.of<GymRepository>(context, listen: false);
 
     try {
-      final notes = _notesController.text.trim();
+      // Build session notes with extra run info if present
+      String notes = _notesController.text.trim();
+      // extraRuns removed
+      // If there's run distance but also run time, we store both
+      // Multiple runs would go in notes as "Run 2: Xkm, Ymin"
 
+      // Create the session
       final session = Session(
         date: _selectedDate,
         bodyPart: _selectedBodyParts.join(', '),
@@ -160,6 +174,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       );
       await repository.insertSession(session);
 
+      // Save exercise entries
       for (final entry in _exerciseEntries) {
         if (entry.weightController.text.trim().isEmpty) continue;
         final wt = WeightTraining(
@@ -200,6 +215,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         entry.dispose();
       }
       _exerciseEntries.clear();
+      _availableExercises.clear();
       if (_lastBodyWeight != null) {
         _bodyWeightController.text = _lastBodyWeight.toString();
       }
@@ -218,10 +234,15 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Training Mode Toggle
                   _buildModeToggle(trainingState),
                   const SizedBox(height: 20),
+
+                  // Session Setup
                   _buildSectionTitle('Session Setup'),
                   const SizedBox(height: 8),
+
+                  // Date picker
                   InkWell(
                     onTap: _pickDate,
                     child: InputDecorator(
@@ -234,6 +255,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+
+                  // Body part selection
                   const Text('Body Parts:'),
                   const SizedBox(height: 4),
                   Wrap(
@@ -257,6 +280,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 12),
+
+                  // Body weight
                   TextFormField(
                     controller: _bodyWeightController,
                     decoration: const InputDecoration(
@@ -264,9 +289,12 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                       border: OutlineInputBorder(),
                       suffixText: 'kg',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                   ),
                   const SizedBox(height: 20),
+
+                  // Exercises section
                   if (_exerciseEntries.isNotEmpty) ...[
                     _buildSectionTitle('Exercises'),
                     const SizedBox(height: 8),
@@ -274,6 +302,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                       _buildExerciseCard(entry),
                     const SizedBox(height: 20),
                   ],
+
+                  // Cardio & Recovery
                   _buildSectionTitle('Cardio & Recovery'),
                   const SizedBox(height: 8),
                   Row(
@@ -286,7 +316,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                             border: OutlineInputBorder(),
                             suffixText: 'km',
                           ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType:
+                              const TextInputType.numberWithOptions(decimal: true),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -314,6 +345,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 20),
+
+                  // Notes
                   _buildSectionTitle('Notes'),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -325,6 +358,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 24),
+
+                  // Save button
                   FilledButton.icon(
                     onPressed: _saveSession,
                     icon: const Icon(Icons.check),
@@ -378,7 +413,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                'Switch to ${trainingState.isHypertrophy ? 'Strength' : 'Hypertrophy'}',
+                'Switch to ${trainingState.isHypertrophy ? 'Strength' : 'Hyper'}',
               ),
             ),
           ],
@@ -429,7 +464,8 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                       suffixText: 'kg',
                       isDense: true,
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -465,6 +501,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   }
 }
 
+/// Helper class to manage exercise entry controllers
 class _ExerciseEntry {
   final String name;
   final TextEditingController weightController;

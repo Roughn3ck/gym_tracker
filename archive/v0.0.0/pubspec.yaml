@@ -1,0 +1,40 @@
+name: gym_tracker
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 0.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Database persistence
+  sqflite: ^2.3.3
+  sqflite_common_ffi: ^2.3.3
+  path: ^1.9.0
+
+  # Date and time utilities
+  intl: ^0.19.0
+
+  # State management
+  provider: ^6.1.1
+
+  # File sharing for database export
+  share_plus: ^10.1.2
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/databases/gym_tracker.db

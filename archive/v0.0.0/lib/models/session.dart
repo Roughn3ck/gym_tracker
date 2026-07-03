@@ -2,8 +2,7 @@
 class Session {
   final int? id;
   final DateTime date;
-  final String? workout; // free-text workout description (e.g. "chest and bis")
-  final String? bodyParts; // JSON array of canonical body part names, e.g. ["Chest","Biceps"]
+  final String? bodyPart;
   final double? runDuration; // run distance in km
   final int? runTime; // run time in minutes
   final int? saunaDuration; // in minutes
@@ -14,8 +13,7 @@ class Session {
   Session({
     this.id,
     required this.date,
-    this.workout,
-    this.bodyParts,
+    this.bodyPart,
     this.runDuration,
     this.runTime,
     this.saunaDuration,
@@ -33,8 +31,7 @@ class Session {
   Map<String, dynamic> toMap() {
     return {
       'Date': '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}',
-      'Workout': workout,
-      'BodyParts': bodyParts,
+      'BodyPart': bodyPart,
       'RunDuration': runDuration,
       'RunTime': runTime,
       'SaunaDuration': saunaDuration,
@@ -49,8 +46,7 @@ class Session {
     return Session(
       id: map['ID'] as int?,
       date: _parseDate(map['Date'] as String),
-      workout: map['Workout'] as String?,
-      bodyParts: map['BodyParts'] as String?,
+      bodyPart: map['BodyPart'] as String?,
       runDuration: map['RunDuration'] as double?,
       runTime: map['RunTime'] as int?,
       saunaDuration: map['SaunaDuration'] as int?,
@@ -64,8 +60,7 @@ class Session {
   Session copyWith({
     int? id,
     DateTime? date,
-    String? workout,
-    String? bodyParts,
+    String? bodyPart,
     double? runDuration,
     int? runTime,
     int? saunaDuration,
@@ -76,8 +71,7 @@ class Session {
     return Session(
       id: id ?? this.id,
       date: date ?? this.date,
-      workout: workout ?? this.workout,
-      bodyParts: bodyParts ?? this.bodyParts,
+      bodyPart: bodyPart ?? this.bodyPart,
       runDuration: runDuration ?? this.runDuration,
       runTime: runTime ?? this.runTime,
       saunaDuration: saunaDuration ?? this.saunaDuration,
@@ -89,18 +83,17 @@ class Session {
 
   @override
   String toString() {
-    return 'Session(id: $id, date: $date, workout: $workout, bodyParts: $bodyParts, runDuration: $runDuration, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
+    return 'Session(id: $id, date: $date, bodyPart: $bodyPart, runDuration: $runDuration, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-
+  
     return other is Session &&
         other.id == id &&
         other.date == date &&
-        other.workout == workout &&
-        other.bodyParts == bodyParts &&
+        other.bodyPart == bodyPart &&
         other.runDuration == runDuration &&
         other.runTime == runTime &&
         other.saunaDuration == saunaDuration &&
@@ -113,8 +106,7 @@ class Session {
   int get hashCode {
     return id.hashCode ^
         date.hashCode ^
-        workout.hashCode ^
-        bodyParts.hashCode ^
+        bodyPart.hashCode ^
         runDuration.hashCode ^
         runTime.hashCode ^
         saunaDuration.hashCode ^

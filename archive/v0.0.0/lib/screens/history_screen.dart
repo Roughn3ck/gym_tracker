@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:gym_tracker/repositories/gym_repository.dart';
@@ -44,23 +43,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  /// Parses a session's `bodyParts` JSON array string into a comma-joined list.
-  ///
-  /// Returns `null` when there is nothing to render (input is null or an empty
-  /// array like `'[]'`), so the caller can omit the "Body Parts:" line entirely.
-  /// Falls back to the raw string if the JSON is malformed (defensive).
-  String? _parseBodyParts(String? bodyPartsJson) {
-    if (bodyPartsJson == null) return null;
-    try {
-      final decoded = jsonDecode(bodyPartsJson);
-      if (decoded is! List) return bodyPartsJson;
-      if (decoded.isEmpty) return null;
-      return decoded.map((e) => e.toString()).join(', ');
-    } catch (_) {
-      return bodyPartsJson;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,15 +78,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               children: [
                                 const SizedBox(height: 4),
                                 Text('Date: ${_formatDate(session.date)}'),
-                                if (session.workout != null)
-                                  Text('Workout: ${session.workout}'),
-                                Builder(builder: (_) {
-                                  final parsed = _parseBodyParts(session.bodyParts);
-                                  if (parsed == null) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Text('Body Parts: $parsed');
-                                }),
+                                if (session.bodyPart != null)
+                                  Text('Body Part: ${session.bodyPart}'),
                                 if (session.trainingStyle != null)
                                   Text('Style: ${session.trainingStyle}'),
                                 if (session.runDuration != null)

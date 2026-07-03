@@ -7,7 +7,7 @@ import 'package:flutter/services.dart' show rootBundle;
 /// Database helper class for managing SQLite database operations
 class DatabaseHelper {
   static const String _databaseName = 'gym_tracker.db';
-  static const int _databaseVersion = 2;
+  static const int _databaseVersion = 3;
 
   // Singleton instance
   static Database? _database;
@@ -58,12 +58,6 @@ class DatabaseHelper {
       path,
       version: _databaseVersion,
       onOpen: (db) async {
-        // Add RunTime column if it doesn't exist (migration from v1)
-        try {
-          await db.execute('ALTER TABLE SESSIONS ADD COLUMN RunTime INTEGER');
-        } catch (_) {
-          // Column already exists — ignore
-        }
         await db.execute('PRAGMA foreign_keys = ON');
       },
     );

@@ -2,6 +2,52 @@
 
 A Flutter-based fitness tracking app for logging strength and hypertrophy workouts, monitoring body stats, and reviewing session history. Ships with a pre-populated exercise catalogue — no personal data, works out of the box.
 
+**Current release: `v0.1.0`** (DB schema `v3`) — see [What's New](#whats-new) below.
+
+---
+
+## What's New
+
+### v0.1.0 — Expanded Body Part Taxonomy & Schema v3
+
+This release overhauls the muscle-group model from a coarse 5-category list to a precise 10-category one, and introduces a clean separation between a free-text workout description and the canonical body parts trained.
+
+**Body part taxonomy: 5 → 10**
+
+| v0.0.0 (old) | v0.1.0 (new) |
+|---|---|
+| Legs | **Quads, Hamstrings, Calves, Glutes** |
+| Arms | **Biceps, Triceps** |
+| Chest | Chest (unchanged) |
+| Back | Back (unchanged) |
+| Shoulders | Shoulders (unchanged) |
+| — | **Abs** (new) |
+
+**SESSIONS table — two column changes:**
+- **Renamed** `BodyPart` → `Workout` (TEXT) — now stores the original free-text workout description (e.g. `"chest and bis"`), decoupled from the canonical taxonomy.
+- **Added** `BodyParts` (TEXT) — stores a JSON array of canonical body part names taken from `BODY_PARTS` (e.g. `["Chest","Biceps","Triceps"]`).
+
+**EXERCISE_BODY_PARTS table:**
+- Added a `CHECK (BodyPart IN (...))` constraint enforcing the 10 canonical names, preventing typos and stale taxonomy entries.
+- Re-mapped all 33 exercises across the new taxonomy (43 mappings total — several exercises target multiple refined groups, e.g. *Squat* → Quads + Hamstrings + Glutes; *Bent over dumbbell row* → Back + Biceps + Triceps).
+
+**Schema versioning:**
+- `_databaseVersion` bumped `2` → `3` in `database_helper.dart`.
+- Removed the legacy v1→v2 `onOpen` migration (`ALTER TABLE SESSIONS ADD COLUMN RunTime`) — v3 ships a clean template DB; no in-place migrations.
+- The asset DB is regenerated from `create_db.py`, so the bundled `.db` is always the v3 template.
+
+**UI:**
+- **Workout tab** gains a dedicated **Workout** free-text field (below Date, above Body Parts chips), and the chip grid now reflects all 10 categories. Body part selection is serialised to the `BodyParts` JSON column on save.
+- **History tab** renders `Workout: <text>` and a parsed, comma-joined `Body Parts:` line. Empty/null body parts render nothing (no orphaned "Body Parts:" header).
+- **Exercises tab** automatically reflects the 10 categories (it reads `BODY_PARTS` dynamically — no code change needed).
+
+**Cleanup:**
+- Removed four stale, extension-less tracked files under `lib/` (legacy copies from a prior tooling iteration).
+- `archive/v0.0.0/` holds the pre-migration source (DB + `lib/` tree + `pubspec.yaml`) for reference.
+- `analysis_options.yaml` excludes `archive/**` from analysis so frozen archived code doesn't fail `flutter analyze`.
+
+> **Not a breaking change for the build:** no dependency or pubspec changes. Existing v0.0.0 databases on a user's device are *not* auto-migrated — the app copies the bundled v3 template on first launch into a fresh location. See [Database Structure](#database-structure).
+
 ---
 
 ## Releases & Installation
@@ -51,7 +97,8 @@ This is the main screen for recording a workout session.
 
 2. **Session Setup** — Set the details for this session:
    - **Date** — Tap the date field to open a date picker. Defaults to today.
-   - **Body Parts** — Tap one or more filter chips (Legs, Chest, Arms, Back, Shoulders) to select which muscle groups you're training. Selecting body parts automatically loads the relevant exercises below.
+   - **Workout** — Free-text description of the workout (e.g. `"chest and bis"`, `"push day"`). Optional.
+   - **Body Parts** — Tap one or more filter chips (Quads, Hamstrings, Calves, Glutes, Chest, Biceps, Triceps, Back, Shoulders, Abs) to select which muscle groups you're training. Selecting body parts automatically loads the relevant exercises below.
    - **Body Weight (kg)** — Enter your current body weight. Auto-filled from your last session if available.
 
 3. **Exercises** — Once you select body parts, exercise cards appear with fields for:
@@ -73,14 +120,14 @@ This is the main screen for recording a workout session.
 
 Browse the exercise catalogue, view and update weights, and add new exercises.
 
-1. **Browse** — Exercises are grouped by body part in expandable sections (Legs, Chest, Arms, Back, Shoulders). Tap a section to expand it.
+1. **Browse** — Exercises are grouped by body part in expandable sections (Quads, Hamstrings, Calves, Glutes, Chest, Biceps, Triceps, Back, Shoulders, Abs). Tap a section to expand it.
 2. **View Latest Weight** — Each exercise shows its latest recorded weight, training style, reps, and sets (e.g., "40 kg | Hypertrophy | 12x4"). Exercises with no recorded weight show "No weight recorded yet".
 3. **Modify Weight** — Tap the **⋮ (three-dot menu)** next to an exercise and select **Modify Weight**. Enter the new weight and save. This creates a new weight record (preserving history) with today's date and your current training style.
 4. **Weight History** — Tap the **⋮ menu** and select **Weight History** to see all past weight entries for that exercise, sorted by date (newest first).
 5. **Add Exercise** — Tap the **＋ (floating action button)** in the bottom-right corner. Fill in:
    - **Exercise Name** — The name of the exercise.
    - **Training Style** — Hypertrophy or Strength (dropdown).
-   - **Body Parts** — Select one or more body parts (an exercise can target multiple, e.g., "Tricep dips" targets both Chest and Arms).
+   - **Body Parts** — Select one or more body parts (an exercise can target multiple, e.g., "Tricep dips" targets both Chest and Triceps).
    - **Initial Weight (optional)** — Starting weight in kg.
    - **Reps / Sets** — Optional initial values.
    - Tap **Save** to add the exercise to the catalogue.
@@ -89,7 +136,7 @@ Browse the exercise catalogue, view and update weights, and add new exercises.
 
 View all past workout sessions in reverse chronological order (newest first).
 
-- Each session card shows: Session ID, date, body parts trained, training style, run distance/time, sauna duration, body weight, and any notes.
+- Each session card shows: Session ID, date, workout description, body parts trained, training style, run distance/time, sauna duration, body weight, and any notes.
 - Tap the **refresh button** (floating action button) to reload history.
 - If no sessions exist yet, you'll see "No workout history yet".
 - Session detail view (drill-down into individual exercises within a session) is planned for a future release.
@@ -114,17 +161,22 @@ Track body measurements and manage app settings.
 
 ## Pre-Populated Exercise Catalogue
 
-The app ships with 5 body parts and 31 exercise mappings:
+The app ships with 10 body parts and 43 exercise mappings (33 unique exercises):
 
 | Body Part | Exercises |
 |-----------|-----------|
-| **Legs** | Deadlift machine, Hamstring curl, Leg extension, Leg press, Leg press Calf raise, Seated calf raise, Squat |
-| **Chest** | Cable flys (decline), Chest fly machine, Chest press, Inclined Chest flys, Tricep dips |
-| **Arms** | Bent over dumbbell row, Cable bicep curl, Cable tricep extension, Incline dumbbell curls, Kettle bell fist pump, Preacher curls, Tricep dips |
-| **Back** | Back raise, Bent over dumbbell row, Close grip pulley row, Dual pulley pull-down, Dual pulley row, Lat pull down, Rear delt |
-| **Shoulders** | Arnold shoulder press, Dumbbell Shoulder press, Front shoulder raise, Rear delt, Side shoulder raise |
+| **Quads** | Squat, Leg press, Deadlift machine, Leg extension |
+| **Hamstrings** | Squat, Leg press, Deadlift machine, Hamstring curl |
+| **Calves** | Seated calf raise, Leg press Calf raise |
+| **Glutes** | Squat, Leg press, Deadlift machine |
+| **Chest** | Chest press, Dumbbell chest press, Chest fly machine, Cable flys (decline), Inclined Chest flys, Tricep dips |
+| **Biceps** | Bent over dumbbell row, Cable bicep curl, Preacher curls, Incline dumbbell curls, Kettle bell fist pump, Face away basion cable curl |
+| **Triceps** | Tricep dips, Bent over dumbbell row, Cable tricep extension, Assisted dips |
+| **Back** | Lat pull down, Dual pulley pull-down, Dual pulley row, Close grip pulley row, Bent over dumbbell row, Back raise, Rear delt |
+| **Shoulders** | Arnold shoulder press, Dumbbell Shoulder press, Front shoulder raise, Side shoulder raise, Lateral shoulder raise, Cable delt pulls, Rear delt |
+| **Abs** | *(no pre-populated exercises — add your own)* |
 
-> **Note:** Some exercises target multiple body parts (e.g., "Tricep dips" → Chest + Arms, "Rear delt" → Back + Shoulders). Adding your own exercises with multiple body parts creates one row per body part.
+> **Note:** Many exercises target multiple body parts (e.g., "Squat" → Quads + Hamstrings + Glutes, "Rear delt" → Back + Shoulders, "Bent over dumbbell row" → Back + Biceps + Triceps). Each mapping is a separate row in the `EXERCISE_BODY_PARTS` junction table.
 
 ---
 
@@ -151,7 +203,8 @@ The app uses a SQLite database (`gym_tracker.db`) bundled as an asset. On first 
 |--------|------|-------------|
 | ID | INTEGER | Primary key, auto-increment |
 | Date | TEXT | `YYYY/MM/DD` format |
-| BodyPart | TEXT | Comma-separated body parts trained |
+| Workout | TEXT | Free-text workout description (e.g. "chest and bis") |
+| BodyParts | TEXT | JSON array of canonical body part names (e.g. `["Chest","Biceps"]`) |
 | RunDuration | REAL | Run distance in km |
 | RunTime | INTEGER | Run time in minutes |
 | SaunaDuration | INTEGER | Sauna time in minutes |
@@ -173,13 +226,13 @@ The app uses a SQLite database (`gym_tracker.db`) bundled as an asset. On first 
 | Column | Type | Description |
 |--------|------|-------------|
 | ID | INTEGER | Primary key, auto-increment |
-| Name | TEXT | NOT NULL — e.g., "Legs", "Chest" |
+| Name | TEXT | NOT NULL — Quads, Hamstrings, Calves, Glutes, Chest, Biceps, Triceps, Back, Shoulders, Abs |
 
 #### EXERCISE_BODY_PARTS — Exercise-to-BodyPart Mapping (pre-populated)
 | Column | Type | Description |
 |--------|------|-------------|
 | Exercise | TEXT | Exercise name (composite PK with BodyPart) |
-| BodyPart | TEXT | Body part name (composite PK with Exercise) |
+| BodyPart | TEXT | Body part name (composite PK with Exercise), `CHECK` constraint enforces the 10 canonical names |
 
 Many-to-many: one exercise can target multiple body parts. Each mapping is a separate row.
 
@@ -209,7 +262,7 @@ lib/
 ├── database/
 │   └── database_helper.dart       # SQLite helper (singleton + FFI + asset copy)
 ├── models/
-│   ├── session.dart               # Session model
+│   ├── session.dart               # Session model (Workout + BodyParts JSON)
 │   ├── body_stat.dart             # Body stats model
 │   ├── body_part.dart             # Body part model
 │   ├── exercise_body_part.dart    # Exercise→BodyPart mapping model
@@ -227,7 +280,13 @@ lib/
 
 assets/
 └── databases/
-    └── gym_tracker.db             # Bundled SQLite database (blank + seed data)
+    └── gym_tracker.db             # Bundled SQLite database (v3 template)
+
+archive/
+└── v2/                            # Pre-v0.1.0 source snapshot (DB + lib/ + pubspec.yaml)
+
+create_db.py                       # Regenerates assets/databases/gym_tracker.db from schema
+analyze_db.py                      # Inspects the bundled database (schema + row counts)
 ```
 
 ---
