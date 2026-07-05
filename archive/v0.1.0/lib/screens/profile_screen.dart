@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:gym_tracker/repositories/gym_repository.dart';
 import 'package:gym_tracker/database/database_helper.dart';
 import 'package:gym_tracker/models/body_stat.dart';
-import 'package:gym_tracker/state/data_refresh_notifier.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -22,46 +21,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   String _error = '';
 
-  // External DB source info — refreshed on tab switch via didChangeDependencies.
-  bool _isExternal = false;
-  String? _externalDbPath;
-
-  // Body stats display: show only the last 2 by default, expand on "Load More"
-  bool _showAllBodyStats = false;
-  int _lastRefreshCount = 0;
-
   @override
   void initState() {
     super.initState();
     _loadBodyStats();
-    _loadDbSourceInfo();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Refresh DB source info when the tab becomes visible.
-    _loadDbSourceInfo();
-  }
-
-  /// Refreshes the external/internal DB source display from the repository.
-  ///
-  /// Calls [loadPersistedPath] first to ensure the persisted external DB path
-  /// is loaded from SharedPreferences — this is needed on app restart when no
-  /// database query has triggered the lazy `database` getter yet.
-  Future<void> _loadDbSourceInfo() async {
-    final dbHelper = DatabaseHelper();
-    await dbHelper.loadPersistedPath();
-    if (!mounted) return;
-    final repository = Provider.of<GymRepository>(context, listen: false);
-    final isExternal = repository.isExternal;
-    final externalPath = repository.externalDbPath;
-    if (mounted) {
-      setState(() {
-        _isExternal = isExternal;
-        _externalDbPath = externalPath;
-      });
-    }
   }
 
   Future<void> _loadBodyStats() async {
@@ -98,8 +61,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final repository = Provider.of<GymRepository>(context, listen: false);
       await repository.insertBodyStat(result);
-      if (!mounted) return;
-      context.read<DataRefreshNotifier>().notifyDataChanged();
       await _loadBodyStats();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -127,8 +88,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final repository = Provider.of<GymRepository>(context, listen: false);
       await repository.updateBodyStat(result.copyWith(id: stat.id));
-      if (!mounted) return;
-      context.read<DataRefreshNotifier>().notifyDataChanged();
       await _loadBodyStats();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -170,8 +129,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final repository = Provider.of<GymRepository>(context, listen: false);
       await repository.deleteBodyStat(stat.id!);
-      if (!mounted) return;
-      context.read<DataRefreshNotifier>().notifyDataChanged();
       await _loadBodyStats();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -191,8 +148,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  /// Shares a copy of the internal database via the system share sheet
-  /// (e.g. email, cloud drive, messaging). Always shares the internal DB.
   Future<void> _exportDatabase() async {
     try {
       final dbHelper = DatabaseHelper();
@@ -215,180 +170,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Share failed: ' + e.toString())),
-        );
-      }
-    }
-  }
-
-  /// Exports the internal database to a user-chosen file path via a save
-  /// dialog. Falls back to copying to the downloads directory if the save
-  /// dialog is unavailable (e.g. on some mobile platforms).
-  Future<void> _exportDatabaseFile() async {
-    try {
-      final dbHelper = DatabaseHelper();
-      final dbPath = await dbHelper.getDatabasePath();
-      if (dbPath == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not find database')),
-          );
-        }
-        return;
-      }
-
-      String? outputPath;
-      try {
-        // Try the save-file dialog first (works on desktop).
-        outputPath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Export Database File',
-          fileName: 'gym_tracker_export.db',
-          type: FileType.custom,
-          allowedExtensions: ['db'],
-        );
-      } catch (_) {
-        // saveFile not supported on this platform — fall through.
-      }
-
-      if (outputPath == null || outputPath.isEmpty) {
-        // Fallback: copy to the downloads directory (or app docs dir).
-        Directory? fallbackDir;
-        try {
-          fallbackDir = await getDownloadsDirectory();
-        } catch (_) {
-          fallbackDir = await getApplicationDocumentsDirectory();
-        }
-        if (fallbackDir != null) {
-          outputPath = '${fallbackDir.path}/gym_tracker_export.db';
-        } else {
-          // Last resort: temp directory.
-          final tempDir = await getTemporaryDirectory();
-          outputPath = '${tempDir.path}/gym_tracker_export.db';
-        }
-      }
-
-      await File(dbPath).copy(outputPath);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Database exported to $outputPath')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export failed: ' + e.toString())),
         );
       }
     }
   }
 
-  /// Loads an external database file.
-  Future<void> _loadExternalDatabase() async {
-    FilePickerResult? result;
-    try {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['db', 'sqlite', 'sqlite3'],
-        allowMultiple: false,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('File picker error: $e')),
-        );
-      }
-      return;
-    }
-
-    if (result == null || result.files.isEmpty) return;
-
-    final filePath = result.files.single.path;
-    if (filePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed: no file path returned.')),
-        );
-      }
-      return;
-    }
-
-    String externalPath = filePath;
-
-    String message;
-    try {
-      final repository =
-          Provider.of<GymRepository>(context, listen: false);
-      message = await repository.setExternalDatabase(externalPath);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Load failed: $e')),
-        );
-      }
-      return;
-    }
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-
-    // Refresh the DB source display and body stats.
-    if (message == DatabaseHelper.externalDbSuccessMessage) {
-      await _loadDbSourceInfo();
-      await _loadBodyStats();
-    }
-  }
-
-  /// Switches back to the internal database after a confirmation dialog.
-  Future<void> _switchToInternalDatabase() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Switch to Internal Database'),
-        content: const Text(
-          'This will disconnect from the external database. '
-          'Your data in the internal database will remain unchanged. '
-          'Continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Switch'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    if (!mounted) return;
-
-    try {
-      final repository =
-          Provider.of<GymRepository>(context, listen: false);
-      await repository.useInternalDatabase();
-      await _loadDbSourceInfo();
-      await _loadBodyStats();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Switched to internal database.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Switch failed: $e')),
-        );
-      }
-    }
-  }
-
   /// Picks a .db/.sqlite/.sqlite3 file and imports it as the live app database.
+  ///
+  /// Flow: file picker → confirmation dialog → repository.importDatabase →
+  /// SnackBar with the returned message → reload body stats on success. On any
+  /// error the live DB is left untouched by the helper, so we just report.
   Future<void> _importDatabase() async {
     FilePickerResult? result;
     try {
@@ -406,6 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
+    // No file selected — user cancelled, do nothing.
     if (result == null || result.files.isEmpty) {
       return;
     }
@@ -423,34 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (!mounted) return;
 
-    // If in external mode, warn that import replaces the internal DB.
-    if (_isExternal) {
-      final warningConfirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Import Warning'),
-          content: const Text(
-            'You are currently using an external database. Importing will '
-            'replace your internal database, not your external one. '
-            'Switch to internal first if you want to import there.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Import Anyway'),
-            ),
-          ],
-        ),
-      );
-      if (warningConfirmed != true) return;
-      if (!mounted) return;
-    }
-
-    // Confirmation dialog.
+    // Confirmation dialog — replaces current data, but a backup is made.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -475,6 +241,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirmed != true) return;
     if (!mounted) return;
 
+    // Run the import via the repository.
     String message;
     try {
       final repository =
@@ -495,6 +262,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       SnackBar(content: Text(message)),
     );
 
+    // On success, reload this screen's data so it reflects the imported DB.
+    // The other tabs reload automatically on next navigation (MainScreen
+    // rebuilds each tab's State on tap).
     if (message == DatabaseHelper.importSuccessMessage) {
       await _loadBodyStats();
     }
@@ -502,21 +272,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch the DataRefreshNotifier — when notifyDataChanged() fires anywhere
-    // in the app, this widget rebuilds. We compare refreshCount to our last
-    // seen value and trigger a data reload in a post-frame callback.
-    final notifier = Provider.of<DataRefreshNotifier>(context);
-    if (notifier.refreshCount != _lastRefreshCount) {
-      _lastRefreshCount = notifier.refreshCount;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadBodyStats();
-      });
-    }
-
-    // Determine which body stats to display (last 2 by default, all when expanded)
-    final displayedBodyStats =
-        _showAllBodyStats ? _bodyStats : _bodyStats.take(2).toList();
-
     return Scaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -626,8 +381,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         )
-                      else ...[
-                        for (final stat in displayedBodyStats)
+                      else
+                        for (final stat in _bodyStats)
                           Card(
                             margin: const EdgeInsets.only(bottom: 12.0),
                             child: ListTile(
@@ -688,31 +443,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
 
-                        // Load More / Show Less buttons
-                        if (_bodyStats.length > 2)
-                          if (!_showAllBodyStats)
-                            Center(
-                              child: TextButton.icon(
-                                onPressed: () {
-                                  setState(() => _showAllBodyStats = true);
-                                },
-                                icon: const Icon(Icons.expand_more),
-                                label: Text(
-                                    'Load More (${_bodyStats.length - 2} more)'),
-                              ),
-                            )
-                          else
-                            Center(
-                              child: TextButton.icon(
-                                onPressed: () {
-                                  setState(() => _showAllBodyStats = false);
-                                },
-                                icon: const Icon(Icons.expand_less),
-                                label: const Text('Show Less'),
-                              ),
-                            ),
-                      ],
-
                       const SizedBox(height: 24),
 
                       // App Settings Section
@@ -769,92 +499,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 24),
 
-                      // Database Source Section
-                      const Text(
-                        'Database Source',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    _isExternal
-                                        ? Icons.folder_open
-                                        : Icons.folder,
-                                    color: _isExternal
-                                        ? Colors.orange
-                                        : Colors.blue,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _isExternal
-                                        ? 'Database: External'
-                                        : 'Database: Internal',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _isExternal
-                                    ? 'Path: ${_externalDbPath ?? "unknown"}'
-                                    : "Using app's private storage",
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              if (_isExternal) ...[
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _loadExternalDatabase,
-                                    icon: const Icon(Icons.swap_horiz),
-                                    label: const Text(
-                                        'Change External Database'),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _switchToInternalDatabase,
-                                    icon:
-                                        const Icon(Icons.folder_special),
-                                    label: const Text(
-                                        'Switch to Internal Database'),
-                                  ),
-                                ),
-                              ] else
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _loadExternalDatabase,
-                                    icon: const Icon(Icons.folder_open),
-                                    label: const Text(
-                                        'Load External Database'),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
                       // Actions Section
                       ElevatedButton(
                         onPressed: _loadBodyStats,
@@ -872,21 +516,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton(
-                        onPressed: _exportDatabaseFile,
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.save_outlined),
-                            SizedBox(width: 8),
-                            Text('Export Database File'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
                         onPressed: _exportDatabase,
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 50),
@@ -894,9 +523,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.share),
+                            Icon(Icons.download),
                             SizedBox(width: 8),
-                            Text('Share Database'),
+                            Text('Export Database'),
                           ],
                         ),
                       ),
@@ -911,7 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             Icon(Icons.upload),
                             SizedBox(width: 8),
-                            Text('Import Database (Replace)'),
+                            Text('Import Database'),
                           ],
                         ),
                       ),

@@ -5,7 +5,6 @@ import 'package:gym_tracker/models/body_part.dart';
 import 'package:gym_tracker/models/exercise_body_part.dart';
 import 'package:gym_tracker/models/weight_training.dart';
 import 'package:gym_tracker/state/training_state.dart';
-import 'package:gym_tracker/state/data_refresh_notifier.dart';
 
 /// Screen for browsing exercises, viewing weights, and adding new exercises
 class ExercisesScreen extends StatefulWidget {
@@ -21,7 +20,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
   Map<String, WeightTraining?> _latestWeights = {};
   bool _isLoading = true;
   String _error = '';
-  int _lastRefreshCount = 0;
 
   @override
   void initState() {
@@ -101,8 +99,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
         await repository.insertWeightTraining(wt);
       }
 
-      if (!mounted) return;
-      context.read<DataRefreshNotifier>().notifyDataChanged();
       await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -120,56 +116,40 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
 
   Future<void> _modifyWeight(String exerciseName) async {
     final current = _latestWeights[exerciseName];
-    final result = await showDialog<_ModifyWeightResult>(
+    final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _ModifyWeightDialog(
         exerciseName: exerciseName,
         currentWeight: current?.weight ?? '',
-        currentReps: current?.reps.toString() ?? '',
-        currentSets: current?.sets.toString() ?? '',
       ),
     );
 
-    if (result == null) return;
+    if (result == null || result.isEmpty) return;
     if (!mounted) return;
 
     try {
       final repository = Provider.of<GymRepository>(context, listen: false);
+      final trainingState = Provider.of<TrainingState>(context, listen: false);
 
-      if (current != null && current.id != null) {
-        // Update the existing entry with all fields.
-        await repository.updateWeightTraining(current.copyWith(
-          weight: result.weight,
-          reps: int.tryParse(result.reps) ?? 0,
-          sets: int.tryParse(result.sets) ?? 0,
-          date: DateTime.now(),
-        ));
-      } else {
-        // No existing entry — insert a new one.
-        final trainingState = Provider.of<TrainingState>(context, listen: false);
-        final wt = WeightTraining(
-          date: DateTime.now(),
-          trainingStyle: trainingState.currentModeName,
-          exercises: exerciseName,
-          weight: result.weight,
-          reps: int.tryParse(result.reps) ?? 0,
-          sets: int.tryParse(result.sets) ?? 0,
-        );
-        await repository.insertWeightTraining(wt);
-      }
-
-      if (!mounted) return;
-      context.read<DataRefreshNotifier>().notifyDataChanged();
+      final wt = WeightTraining(
+        date: DateTime.now(),
+        trainingStyle: trainingState.currentModeName,
+        exercises: exerciseName,
+        weight: result,
+        reps: current?.reps ?? 0,
+        sets: current?.sets ?? 0,
+      );
+      await repository.insertWeightTraining(wt);
       await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Updated $exerciseName: ${result.weight} kg, ${result.reps} reps, ${result.sets} sets')),
+          SnackBar(content: Text('Weight updated to $result for $exerciseName')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update: $e')),
+          SnackBar(content: Text('Failed to update weight: $e')),
         );
       }
     }
@@ -219,17 +199,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch the DataRefreshNotifier — when notifyDataChanged() fires anywhere
-    // in the app, this widget rebuilds. We compare refreshCount to our last
-    // seen value and trigger a data reload in a post-frame callback.
-    final notifier = Provider.of<DataRefreshNotifier>(context);
-    if (notifier.refreshCount != _lastRefreshCount) {
-      _lastRefreshCount = notifier.refreshCount;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadData();
-      });
-    }
-
     return Scaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -444,27 +413,11 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
   }
 }
 
-/// Result from the Modify Weight dialog — includes weight, reps, and sets.
-class _ModifyWeightResult {
-  final String weight;
-  final String reps;
-  final String sets;
-
-  _ModifyWeightResult({required this.weight, required this.reps, required this.sets});
-}
-
 class _ModifyWeightDialog extends StatefulWidget {
   final String exerciseName;
   final String currentWeight;
-  final String currentReps;
-  final String currentSets;
 
-  const _ModifyWeightDialog({
-    required this.exerciseName,
-    required this.currentWeight,
-    required this.currentReps,
-    required this.currentSets,
-  });
+  const _ModifyWeightDialog({required this.exerciseName, required this.currentWeight});
 
   @override
   State<_ModifyWeightDialog> createState() => _ModifyWeightDialogState();
@@ -473,63 +426,41 @@ class _ModifyWeightDialog extends StatefulWidget {
 class _ModifyWeightDialogState extends State<_ModifyWeightDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _weightController;
-  late final TextEditingController _repsController;
-  late final TextEditingController _setsController;
 
   @override
   void initState() {
     super.initState();
     _weightController = TextEditingController(text: widget.currentWeight);
-    _repsController = TextEditingController(text: widget.currentReps);
-    _setsController = TextEditingController(text: widget.currentSets);
   }
 
   @override
   void dispose() {
     _weightController.dispose();
-    _repsController.dispose();
-    _setsController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Modify — ${widget.exerciseName}'),
+      title: Text('Modify Weight — ${widget.exerciseName}'),
       content: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.currentWeight.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text('Current weight: ${widget.currentWeight} kg', style: const TextStyle(color: Colors.grey)),
+              ),
             TextFormField(
               controller: _weightController,
-              decoration: const InputDecoration(labelText: 'Weight', border: OutlineInputBorder(), suffixText: 'kg'),
+              decoration: const InputDecoration(labelText: 'New Weight', border: OutlineInputBorder(), suffixText: 'kg'),
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) return 'Enter a weight';
                 return null;
               },
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _repsController,
-                    decoration: const InputDecoration(labelText: 'Reps', border: OutlineInputBorder()),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _setsController,
-                    decoration: const InputDecoration(labelText: 'Sets', border: OutlineInputBorder()),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
@@ -539,11 +470,7 @@ class _ModifyWeightDialogState extends State<_ModifyWeightDialog> {
         FilledButton(
           onPressed: () {
             if (_formKey.currentState?.validate() ?? false) {
-              Navigator.of(context).pop(_ModifyWeightResult(
-                weight: _weightController.text.trim(),
-                reps: _repsController.text.trim(),
-                sets: _setsController.text.trim(),
-              ));
+              Navigator.of(context).pop(_weightController.text.trim());
             }
           },
           child: const Text('Save'),

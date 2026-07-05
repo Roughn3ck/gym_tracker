@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:gym_tracker/repositories/gym_repository.dart';
 import 'package:gym_tracker/state/training_state.dart';
-import 'package:gym_tracker/state/data_refresh_notifier.dart';
 import 'package:gym_tracker/screens/main_screen.dart';
 
 // Note: GymRepository is a plain class (not a ChangeNotifier), so it is
@@ -22,7 +21,6 @@ class GymTrackerApp extends StatelessWidget {
       providers: [
         Provider(create: (context) => GymRepository()),
         ChangeNotifierProvider(create: (context) => TrainingState()),
-        ChangeNotifierProvider(create: (context) => DataRefreshNotifier()),
       ],
       child: MaterialApp(
         title: 'Gym Tracker',

@@ -6,10 +6,6 @@ import 'package:gym_tracker/models/body_part.dart';
 import 'package:gym_tracker/models/session.dart';
 import 'package:gym_tracker/models/weight_training.dart';
 import 'package:gym_tracker/state/training_state.dart';
-import 'package:gym_tracker/state/data_refresh_notifier.dart';
-
-/// Visual state of an exercise entry in the workout screen.
-enum ExerciseEntryState { idle, expanded, completed }
 
 /// Screen for starting and logging a workout session
 class ActiveWorkoutScreen extends StatefulWidget {
@@ -34,10 +30,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   List<BodyPart> _allBodyParts = [];
   List<String> _availableExercises = [];
   List<_ExerciseEntry> _exerciseEntries = [];
-  final Map<String, WeightTraining?> _latestWeights = {};
+  Map<String, WeightTraining?> _latestWeights = {};
   double? _lastBodyWeight;
   bool _isLoading = false;
-  int _lastRefreshCount = 0;
 
   @override
   void initState() {
@@ -87,9 +82,6 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     if (_selectedBodyParts.isEmpty) {
       setState(() {
         _availableExercises = [];
-        for (final entry in _exerciseEntries) {
-          entry.dispose();
-        }
         _exerciseEntries.clear();
       });
       return;
@@ -101,109 +93,40 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         _selectedBodyParts.toList(),
       );
 
-      // Load latest weights for these exercises (only for ones not yet loaded)
+      // Load latest weights for these exercises
       final trainingState = Provider.of<TrainingState>(context, listen: false);
+      final latestWeights = <String, WeightTraining?>{};
       for (final name in exercises) {
-        if (!_latestWeights.containsKey(name)) {
-          _latestWeights[name] =
-              await repository.getLatestWeightForExercise(name, trainingState.currentModeName);
-        }
+        latestWeights[name] = await repository.getLatestWeightForExercise(name, trainingState.currentModeName);
       }
 
-      // Preserve existing entries (completed/expanded states) for exercises
-      // still in the list. Create new idle entries for new exercises.
-      // Dispose entries for exercises no longer in the list.
-      final existingByName = <String, _ExerciseEntry>{};
+      // Build exercise entries with pre-filled data
+      final entries = exercises.map((name) {
+        final latest = latestWeights[name];
+        return _ExerciseEntry(
+          name: name,
+          weight: latest?.weight ?? '',
+          reps: latest?.reps.toString() ?? '',
+          sets: latest?.sets.toString() ?? '',
+        );
+      }).toList();
+
+      // Dispose old entries
       for (final entry in _exerciseEntries) {
-        existingByName[entry.name] = entry;
-      }
-
-      final newEntries = <_ExerciseEntry>[];
-      for (final name in exercises) {
-        if (existingByName.containsKey(name)) {
-          // Keep existing entry (preserves completed/expanded state)
-          newEntries.add(existingByName[name]!);
-          existingByName.remove(name);
-        } else {
-          // Create new idle entry with pre-filled data from latest weight
-          final latest = _latestWeights[name];
-          newEntries.add(_ExerciseEntry(
-            name: name,
-            weight: latest?.weight ?? '',
-            reps: latest?.reps.toString() ?? '',
-            sets: latest?.sets.toString() ?? '',
-          ));
-        }
-      }
-
-      // Dispose entries for exercises no longer in the list
-      for (final entry in existingByName.values) {
         entry.dispose();
       }
 
-      if (!mounted) return;
       setState(() {
         _availableExercises = exercises;
-        _exerciseEntries = newEntries;
+        _latestWeights = latestWeights;
+        _exerciseEntries = entries;
       });
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load exercises: $e')),
-      );
-    }
-  }
-
-  /// Reloads the exercise list when new exercises have been added in the
-  /// Exercises tab. Called when DataRefreshNotifier fires.
-  Future<void> _refreshExercisesAfterDataChange() async {
-    if (_selectedBodyParts.isEmpty) return;
-    try {
-      final repository = Provider.of<GymRepository>(context, listen: false);
-      final exercises = await repository.getExerciseNamesByBodyParts(
-        _selectedBodyParts.toList(),
-      );
-
-      // Refresh latest weights cache for all exercises
-      final trainingState = Provider.of<TrainingState>(context, listen: false);
-      for (final name in exercises) {
-        _latestWeights[name] =
-            await repository.getLatestWeightForExercise(name, trainingState.currentModeName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load exercises: $e')),
+        );
       }
-
-      // Preserve existing entries, add new ones
-      final existingByName = <String, _ExerciseEntry>{};
-      for (final entry in _exerciseEntries) {
-        existingByName[entry.name] = entry;
-      }
-
-      final newEntries = <_ExerciseEntry>[];
-      for (final name in exercises) {
-        if (existingByName.containsKey(name)) {
-          newEntries.add(existingByName[name]!);
-          existingByName.remove(name);
-        } else {
-          final latest = _latestWeights[name];
-          newEntries.add(_ExerciseEntry(
-            name: name,
-            weight: latest?.weight ?? '',
-            reps: latest?.reps.toString() ?? '',
-            sets: latest?.sets.toString() ?? '',
-          ));
-        }
-      }
-
-      for (final entry in existingByName.values) {
-        entry.dispose();
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _availableExercises = exercises;
-        _exerciseEntries = newEntries;
-      });
-    } catch (_) {
-      // Best-effort refresh
     }
   }
 
@@ -223,52 +146,25 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     return '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
   }
 
-  // --- Exercise state transitions ---
-
-  void _onTrain(_ExerciseEntry entry) {
-    setState(() {
-      for (final e in _exerciseEntries) {
-        if (e.state == ExerciseEntryState.expanded) {
-          e.state = ExerciseEntryState.completed;
-        }
-      }
-      entry.state = ExerciseEntryState.expanded;
-    });
-  }
-
-  void _onComplete(_ExerciseEntry entry) {
-    setState(() {
-      entry.state = ExerciseEntryState.completed;
-    });
-  }
-
-  void _onEdit(_ExerciseEntry entry) {
-    setState(() {
-      for (final e in _exerciseEntries) {
-        if (e.state == ExerciseEntryState.expanded) {
-          e.state = ExerciseEntryState.completed;
-        }
-      }
-      entry.state = ExerciseEntryState.expanded;
-    });
-  }
-
   Future<void> _saveSession() async {
-    // Body parts are no longer required — a session can be just cardio,
-    // sauna, body weight, or notes without any exercises.
+    if (_selectedBodyParts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one body part')),
+      );
+      return;
+    }
+
     final trainingState = Provider.of<TrainingState>(context, listen: false);
     final repository = Provider.of<GymRepository>(context, listen: false);
 
     try {
-      // Auto-complete any currently expanded exercise before saving
-      for (final entry in _exerciseEntries) {
-        if (entry.state == ExerciseEntryState.expanded) {
-          entry.state = ExerciseEntryState.completed;
-        }
-      }
-
+      // Build session notes with extra run info if present
       String notes = _notesController.text.trim();
+      // extraRuns removed
+      // If there's run distance but also run time, we store both
+      // Multiple runs would go in notes as "Run 2: Xkm, Ymin"
 
+      // Create the session
       final workoutText = _workoutController.text.trim();
       final session = Session(
         date: _selectedDate,
@@ -282,11 +178,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         other: notes.isNotEmpty ? notes : null,
       );
       await repository.insertSession(session);
-      if (!mounted) return;
 
-      // Save only completed exercises with non-empty weight
+      // Save exercise entries
       for (final entry in _exerciseEntries) {
-        if (entry.state != ExerciseEntryState.completed) continue;
         if (entry.weightController.text.trim().isEmpty) continue;
         final wt = WeightTraining(
           date: _selectedDate,
@@ -299,18 +193,18 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         await repository.insertWeightTraining(wt);
       }
 
-      if (!mounted) return;
-      // Notify other screens (History, Exercises, Profile) to refresh.
-      context.read<DataRefreshNotifier>().notifyDataChanged();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session saved!')),
-      );
-      _resetForm();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session saved!')),
+        );
+        _resetForm();
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save session: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save session: $e')),
+        );
+      }
     }
   }
 
@@ -337,17 +231,6 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   @override
   Widget build(BuildContext context) {
     final trainingState = Provider.of<TrainingState>(context);
-
-    // Watch the DataRefreshNotifier — when notifyDataChanged() fires (e.g.
-    // after adding a new exercise in the Exercises tab), reload the exercise
-    // list so new exercises appear automatically without toggling body parts.
-    final notifier = Provider.of<DataRefreshNotifier>(context);
-    if (notifier.refreshCount != _lastRefreshCount) {
-      _lastRefreshCount = notifier.refreshCount;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _refreshExercisesAfterDataChange();
-      });
-    }
 
     return Scaffold(
       body: _isLoading
@@ -390,7 +273,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                   const SizedBox(height: 12),
 
                   // Body part selection
-                  const Text('Body Parts (optional):'),
+                  const Text('Body Parts:'),
                   const SizedBox(height: 4),
                   Wrap(
                     spacing: 8,
@@ -563,190 +446,90 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   }
 
   Widget _buildExerciseCard(_ExerciseEntry entry) {
-    final latest = _latestWeights[entry.name];
-    final lastHint = latest != null ? 'Last: ${latest.weight} kg' : null;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
-        child: switch (entry.state) {
-          ExerciseEntryState.idle => _buildIdleCard(entry, lastHint),
-          ExerciseEntryState.expanded => _buildExpandedCard(entry, lastHint),
-          ExerciseEntryState.completed => _buildCompletedCard(entry),
-        },
-      ),
-    );
-  }
-
-  Widget _buildIdleCard(_ExerciseEntry entry, String? lastHint) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              if (lastHint != null)
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Text(
-                  lastHint,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  entry.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
-            ],
-          ),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: () => _onTrain(entry),
-          icon: const Icon(Icons.fitness_center, size: 18),
-          label: const Text('Train'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildExpandedCard(_ExerciseEntry entry, String? lastHint) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              entry.name,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                if (_latestWeights[entry.name] != null)
+                  Text(
+                    'Last: ${_latestWeights[entry.name]!.weight} kg',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+              ],
             ),
-            if (lastHint != null)
-              Text(
-                lastHint,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: TextFormField(
-                controller: entry.weightController,
-                decoration: const InputDecoration(
-                  labelText: 'Weight',
-                  border: OutlineInputBorder(),
-                  suffixText: 'kg',
-                  isDense: true,
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextFormField(
-                controller: entry.repsController,
-                decoration: const InputDecoration(
-                  labelText: 'Reps',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                keyboardType: TextInputType.number,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextFormField(
-                controller: entry.setsController,
-                decoration: const InputDecoration(
-                  labelText: 'Sets',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                keyboardType: TextInputType.number,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            onPressed: () => _onComplete(entry),
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Complete'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompletedCard(_ExerciseEntry entry) {
-    final weight = entry.weightController.text.trim();
-    final reps = entry.repsController.text.trim();
-    final sets = entry.setsController.text.trim();
-    final summaryParts = <String>[
-      if (weight.isNotEmpty) '$weight kg',
-      if (reps.isNotEmpty) '$reps reps',
-      if (sets.isNotEmpty) '$sets sets',
-    ];
-    final summary = summaryParts.join(' × ');
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 20),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      entry.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: entry.weightController,
+                    decoration: const InputDecoration(
+                      labelText: 'Weight',
+                      border: OutlineInputBorder(),
+                      suffixText: 'kg',
+                      isDense: true,
                     ),
-                    if (summary.isNotEmpty)
-                      Text(
-                        summary,
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                  ],
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: entry.repsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Reps',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: entry.setsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Sets',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        OutlinedButton(
-          onPressed: () => _onEdit(entry),
-          child: const Text('Edit'),
-        ),
-      ],
+      ),
     );
   }
 }
 
-/// Helper class to manage exercise entry controllers and state.
+/// Helper class to manage exercise entry controllers
 class _ExerciseEntry {
   final String name;
   final TextEditingController weightController;
   final TextEditingController repsController;
   final TextEditingController setsController;
-  ExerciseEntryState state;
 
   _ExerciseEntry({
     required this.name,
     required String weight,
     required String reps,
     required String sets,
-  })  : state = ExerciseEntryState.idle,
-        weightController = TextEditingController(text: weight),
+  })  : weightController = TextEditingController(text: weight),
         repsController = TextEditingController(text: reps),
         setsController = TextEditingController(text: sets);
 

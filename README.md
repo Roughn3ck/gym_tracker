@@ -2,11 +2,35 @@
 
 A Flutter-based fitness tracking app for logging strength and hypertrophy workouts, monitoring body stats, and reviewing session history. Ships with a pre-populated exercise catalogue — no personal data, works out of the box.
 
-**Current release: `v0.1.0`** (DB schema `v3`) — see [What's New](#whats-new) below.
+**Current release: `v0.1.1`** (DB schema `v3`) — see [What's New](#whats-new) below.
 
 ---
 
 ## What's New
+
+### v0.1.1 — External Database Support
+
+This release adds the ability to use a database file at a user-specified filesystem path directly, making the database a true shared resource that both the app and external tools (e.g. an AI coach) can work with simultaneously.
+
+**Three database modes:**
+
+1. **Internal DB (default)** — unchanged from v0.1.0. The app copies a bundled `gym_tracker.db` from assets into its private storage on first launch. Zero-config for new users.
+2. **External DB** — the user picks a `.db` file via the file picker. The app opens it directly at its filesystem path — no copying, no internalization. The path is persisted in `SharedPreferences` so the choice survives app restarts. Both the app and external tools can read/write the same file simultaneously.
+3. **Export internal DB** — users on the internal DB can save it as a `.db` file to a chosen location via a save dialog (in addition to the existing share-via-email/cloud flow).
+
+**Profile tab changes:**
+- New **Database Source** section showing whether the app is using the internal or external database, with buttons to load, change, or switch.
+- Existing export renamed to **Share Database** (system share sheet).
+- New **Export Database File** button (save dialog to a chosen path).
+- Existing import renamed to **Import Database (Replace)** — with a warning dialog if the user is in external mode (import replaces the *internal* DB, not the external one).
+
+**Key design decisions:**
+- `getDatabasePath()` always returns the **internal** path — import and share/export always operate on the internal DB, never the external one.
+- `setExternalDatabase()` validates the file is a v3 Gym Tracker DB (reuses the existing `_validateV3Database` check) before switching.
+- If the external file is deleted while the app is closed, the app falls back to internal mode (simple check for v0.1.1; a proper error dialog is planned for a future version).
+- On Android, `file_picker` v8 returns a cached filesystem path, so no `content://` URI workaround is needed.
+- Added `shared_preferences` dependency for persisting the external DB path.
+- Added `WRITE_EXTERNAL_STORAGE` + `READ_EXTERNAL_STORAGE` permissions and `requestLegacyExternalStorage` to the Android manifest.
 
 ### v0.1.0 — Expanded Body Part Taxonomy & Schema v3
 
@@ -153,9 +177,17 @@ Track body measurements and manage app settings.
 
 2. **Settings** — Toggles for Notifications, GPS Tracking, Health Connect, and Auto Backup. These are UI placeholders for now (not yet functional).
 
-3. **Export Database** — Tap **Export Database** to share a copy of your `gym_tracker.db` file via the system share sheet (e.g., email, cloud drive, messaging). Useful for backups.
+3. **Database Source** — Shows whether the app is using the internal or external database:
+   - **Internal (default)** — the app uses its private storage. Tap **Load External Database** to switch to a `.db` file on your filesystem.
+   - **External** — the app reads/writes directly to a user-selected `.db` file (no copying). Tap **Change External Database** to pick a different file, or **Switch to Internal Database** to go back to the default. The external path is persisted across app restarts.
 
-4. **Refresh Data** — Tap **Refresh Data** to reload body stats from the database.
+4. **Export Database File** — Tap **Export Database File** to save a copy of the internal `gym_tracker.db` to a chosen location via a save dialog. Useful for backups and sharing with external tools.
+
+5. **Share Database** — Tap **Share Database** to share a copy of the internal `gym_tracker.db` file via the system share sheet (e.g., email, cloud drive, messaging).
+
+6. **Import Database (Replace)** — Tap **Import Database (Replace)** to replace the internal database with a `.db` file from your filesystem. A backup of the current internal database is created. If you're in external mode, a warning dialog appears first (import replaces the *internal* DB, not the external one).
+
+7. **Refresh Data** — Tap **Refresh Data** to reload body stats from the database.
 
 ---
 
@@ -283,7 +315,8 @@ assets/
     └── gym_tracker.db             # Bundled SQLite database (v3 template)
 
 archive/
-└── v2/                            # Pre-v0.1.0 source snapshot (DB + lib/ + pubspec.yaml)
+└── v0.0.0/                        # Pre-v0.1.0 source snapshot
+└── v0.1.0/                        # Pre-v0.1.1 source snapshot
 
 create_db.py                       # Regenerates assets/databases/gym_tracker.db from schema
 analyze_db.py                      # Inspects the bundled database (schema + row counts)
@@ -302,6 +335,8 @@ analyze_db.py                      # Inspects the bundled database (schema + row
 | `provider` | State management |
 | `share_plus` | Database export via system share sheet |
 | `path_provider` | File system directory access |
+| `file_picker` | File picker for import/external DB/export |
+| `shared_preferences` | Persisting external DB path preference |
 
 ---
 

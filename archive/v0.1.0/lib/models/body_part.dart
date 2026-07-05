@@ -15,13 +15,11 @@ class BodyPart {
     };
   }
 
-  /// Creates a BodyPart object from a database Map.
-  ///
-  /// Handles NULL values gracefully — useful for imported databases.
+  /// Creates a BodyPart object from a database Map
   factory BodyPart.fromMap(Map<String, dynamic> map) {
     return BodyPart(
       id: map['ID'] as int?,
-      name: (map['Name'] as String?) ?? '',
+      name: map['Name'] as String,
     );
   }
 

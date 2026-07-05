@@ -303,27 +303,6 @@ class GymRepository {
     await _databaseHelper.close();
   }
 
-  // --- External Database Support ---
-
-  /// Whether the database is currently external (not internal).
-  bool get isExternal => _databaseHelper.isExternal;
-
-  /// Path to the external database file, or null.
-  String? get externalDbPath => _databaseHelper.externalDbPath;
-
-  /// Sets the database to use an external file.
-  ///
-  /// Returns [DatabaseHelper.externalDbSuccessMessage] on success, or a
-  /// user-facing error string if validation fails.
-  Future<String> setExternalDatabase(String path) async {
-    return await _databaseHelper.setExternalDatabase(path);
-  }
-
-  /// Reverts to the internal database.
-  Future<void> useInternalDatabase() async {
-    await _databaseHelper.useInternalDatabase();
-  }
-
   /// Imports a v3 Gym Tracker database from [sourcePath], replacing the live
   /// app DB. Delegates validation, backup, copy, and reopen to
   /// `DatabaseHelper.importDatabase`.

@@ -56,10 +56,7 @@ class _MainScreenState extends State<MainScreen> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
+      body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: _navItems,
         currentIndex: _selectedIndex,

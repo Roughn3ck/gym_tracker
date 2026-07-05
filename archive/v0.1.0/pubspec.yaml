@@ -2,7 +2,7 @@ name: gym_tracker
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 0.1.1+1
+version: 0.0.0+1
 
 environment:
   sdk: ^3.11.1
@@ -30,9 +30,6 @@ dependencies:
 
   # File picker for database import
   file_picker: ^8.0.6
-
-  # Persistent key-value storage (external DB path preference)
-  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:

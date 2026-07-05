@@ -35,20 +35,16 @@ class WeightTraining {
     };
   }
 
-  /// Creates a WeightTraining object from a database Map.
-  ///
-  /// Handles NULL values gracefully by providing defaults — this is important
-  /// for imported databases that may have nullable columns (the schema does
-  /// not enforce NOT NULL on Weight/Reps/Sets).
+  /// Creates a WeightTraining object from a database Map
   factory WeightTraining.fromMap(Map<String, dynamic> map) {
     return WeightTraining(
       id: map['ID'] as int?,
       date: _parseDate(map['Date'] as String),
-      trainingStyle: (map['TrainingStyle'] as String?) ?? '',
-      exercises: (map['Exercises'] as String?) ?? '',
-      weight: (map['Weight'] as String?) ?? '',
-      reps: (map['Reps'] as int?) ?? 0,
-      sets: (map['Sets'] as int?) ?? 0,
+      trainingStyle: map['TrainingStyle'] as String,
+      exercises: map['Exercises'] as String,
+      weight: map['Weight'] as String,
+      reps: map['Reps'] as int,
+      sets: map['Sets'] as int,
     );
   }
 

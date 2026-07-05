@@ -1,10 +1,10 @@
 # Gym Tracker — Project Status
 
-> **App version: 0.1.0** — DB schema version: **3**
+> **App version: 0.1.1** — DB schema version: **3**
 >
-> **Status: ✅ Working — All four tabs functional, v3 schema with 10 body parts, 43 exercise mappings**
+> **Status: ✅ Working — All four tabs functional, v3 schema with 10 body parts, 43 exercise mappings, external database support, real-time cross-screen updates**
 >
-> The app builds, passes `flutter analyze` (4 info lints only), and the Windows release build succeeds. Ships with a blank `gym_tracker.db` (v3 template) containing 10 body parts and 43 exercise mappings — no personal data. Users can start tracking immediately.
+> The app builds, passes `flutter analyze` (7 info lints only), and the Windows release build succeeds. Ships with a blank `gym_tracker.db` (v3 template) containing 10 body parts and 43 exercise mappings — no personal data. Users can start tracking immediately.
 
 > **Web/Edge Deprecated:** Web/Edge support has been deprecated due to persistent database loading issues with `sqflite_common_ffi_web`. Files archived to `/edge_archive`.
 
@@ -21,6 +21,8 @@ A Flutter-based fitness tracking app targeting both strength and hypertrophy tra
 | State management | `provider` (`^6.1.1`) |
 | Utilities | `intl` (`^0.19.0`) |
 | File sharing | `share_plus` (`^10.1.2`) + `path_provider` (`^2.1.4`) |
+| Key-value storage | `shared_preferences` (`^2.3.0`) — external DB path |
+| Cross-screen refresh | `DataRefreshNotifier` (ChangeNotifier) — real-time updates |
 | Location / GPS | `geolocator` — **removed** (will re-add for GPS feature) |
 | Health data | `health` — **removed** (will re-add for Health Connect feature) |
 | Web/Edge | **Deprecated** — files in `/edge_archive` |
@@ -34,35 +36,56 @@ A Flutter-based fitness tracking app targeting both strength and hypertrophy tra
 - Date picker (defaults to today)
 - **Workout** free-text field for workout description (e.g. "push day", "chest and bis")
 - Body part multi-select via FilterChips (10 categories) — auto-loads relevant exercises
-- Exercise cards with pre-filled weight/reps/sets from last session (style-filtered)
+- **"Train to Expand" exercise pattern** — exercises start collapsed with a "Train" button; tapping expands weight/reps/sets fields; "Complete" collapses to summary; only completed exercises are saved (v0.1.1)
 - Body weight field (auto-filled from last session)
 - Cardio fields: run distance (km), run time (min), sauna duration (min)
 - Free-text notes field
-- Save session (creates SESSIONS row with `Workout` + `BodyParts` JSON + WEIGHT_TRAINING rows)
+- Save session (creates SESSIONS row with `Workout` + `BodyParts` JSON + only completed WEIGHT_TRAINING rows)
 - Reset form button
+- **Real-time updates** — saved sessions appear immediately in History and Exercises tabs (via `DataRefreshNotifier`)
 
 ### Tab 2 — Exercises (Browse & Manage) ✅
 - Exercises grouped by body part in ExpansionTiles (10 categories)
 - Latest weight/reps/sets displayed per exercise (style-filtered)
-- Modify weight via dialog (creates new WEIGHT_TRAINING row — preserves history)
+- **Modify weight updates the existing entry** (no longer creates a duplicate row)
 - Weight history dialog (all past entries, newest first)
 - Add new exercise via dialog (name, training style, multi-body-part selection, optional initial weight/reps/sets)
 - Pull-to-refresh
+- **Real-time updates** — modifications appear immediately across all tabs (via `DataRefreshNotifier`)
 
 ### Tab 3 — History (Review Sessions) ✅
 - All sessions listed in reverse chronological order (Date DESC)
 - Each card shows: session ID, date, workout description, parsed body parts, training style, run distance/time, sauna, body weight, notes
 - Empty state: "No workout history yet"
 - Refresh via floating action button
-- Session detail view: **not yet implemented** (placeholder)
+- **Modify session** — edit dialog with all session fields (date, workout, body parts, training style, run distance/time, sauna, body weight, notes)
+- **Delete session** — with confirmation dialog
+- **Real-time updates** — new sessions appear immediately after save (via `DataRefreshNotifier`)
 
 ### Tab 4 — Profile (Body Stats & Settings) ✅
 - Body stats add/edit/delete via dialog (date, weight kg, waist in, neck in, notes)
-- Body stats listed in reverse chronological order
+- **Body stats show last 2 by default** with "Load More" / "Show Less" toggle
 - Empty state: "No body statistics recorded yet"
 - Settings toggles (Notifications, GPS, Health Connect, Auto Backup) — **UI only, not functional**
-- Export database button (copies `gym_tracker.db` and shares via system share sheet)
+- **Database Source section** — shows Internal/External mode with Load/Change/Switch buttons
+- **Export Database File** — save dialog to copy the internal `.db` to a chosen location
+- **Share Database** — copies `gym_tracker.db` and shares via system share sheet
+- **Import Database (Replace)** — replaces the internal DB from a `.db` file (with warning if in external mode)
 - Refresh data button
+
+### External Database Support ✅ (v0.1.1)
+Three modes for database access:
+1. **Internal DB (default)** — zero-config; copies bundled `gym_tracker.db` from assets on first launch. Unchanged from v0.1.0.
+2. **External DB** — user picks a `.db` file via file picker; the app opens it directly at its filesystem path (no copying). The path is persisted in `SharedPreferences` so the choice survives app restarts. External tools (e.g. an AI coach) can read/write the same file simultaneously.
+3. **Export internal DB** — users on the internal DB can save it as a `.db` file to a chosen location via a save dialog (in addition to the existing share flow).
+
+Key design decisions:
+- `getDatabasePath()` always returns the **internal** path — import and share/export always operate on the internal DB, never the external one.
+- `setExternalDatabase()` validates the file is a v3 Gym Tracker DB (reuses `_validateV3Database`) before switching.
+- `setExternalDatabase()` fixes legacy UNIQUE constraint on SESSIONS.Date (via `_fixSessionsUniqueConstraint`) when loading older external databases.
+- `_loadDbSourceInfo()` calls `loadPersistedPath()` before reading `isExternal` — ensures correct display on app restart.
+- If the external file is deleted while the app is closed, `_resolvePath()` falls back to internal mode.
+- On Android, `file_picker` v8 returns a cached filesystem path — no `content://` URI workaround needed.
 
 ### Training Style Independence ✅
 - Hypertrophy and Strength weight entries coexist as separate rows
@@ -152,6 +175,10 @@ SESSIONS.BodyParts  → JSON array referencing BODY_PARTS.Name
 - FFI initialization for desktop (Windows/macOS/Linux)
 - `_databaseVersion = 3`
 - `onOpen`: `PRAGMA foreign_keys = ON` only (legacy v1→v2 RunTime migration removed in v0.1.0)
+- External DB support: `setExternalDatabase()`, `useInternalDatabase()`, `loadPersistedPath()`, `_resolvePath()` (v0.1.1)
+- `_fixSessionsUniqueConstraint()` — removes legacy UNIQUE constraint on SESSIONS.Date when loading external DBs
+- `getDatabasePath()` always returns internal path (import/export never touch external DB)
+- Reuses `_validateV3Database()` for external DB validation
 - Generic CRUD helpers + table introspection methods
 
 ### GymRepository ✅
@@ -162,9 +189,10 @@ SESSIONS.BodyParts  → JSON array referencing BODY_PARTS.Name
 - `addExercise(name, bodyParts)` — inserts one row per body part
 - `deleteExercise(name)` — removes all body part mappings for an exercise
 - `getDatabaseStats()` — row counts per table
+- Exposed `isExternal`, `externalDbPath`, `setExternalDatabase`, `useInternalDatabase`
 
 ### Models ✅
-All 5 models with `YYYY/MM/DD` date format:
+All 5 models with `YYYY/MM/DD` date format and null-safe `fromMap()`:
 - `Session` — fields: `workout` (free-text), `bodyParts` (JSON array string), plus run/cardio/weight/training fields
 - `BodyStat`
 - `BodyPart`
@@ -173,6 +201,7 @@ All 5 models with `YYYY/MM/DD` date format:
 
 ### State Management ✅
 - `TrainingState` — ChangeNotifier with Hypertrophy/Strength toggle, `currentModeName`, `currentModeColor`, `currentModeDescription`
+- `DataRefreshNotifier` — ChangeNotifier with `refreshCount` counter for cross-screen real-time updates (v0.1.1)
 
 ---
 
@@ -180,16 +209,14 @@ All 5 models with `YYYY/MM/DD` date format:
 
 | Feature | Status |
 |---------|--------|
-| **Session detail view** | HistoryScreen tap shows placeholder (TODO) |
-| **Edit/delete individual sets** | Not implemented |
 | **Date-range filter & search** | History has no filter |
 | **BMI display** | Not in Profile |
-| **Settings persistence** | Toggles don't persist (no SharedPreferences) |
+| **Settings persistence** | Toggles don't persist (SharedPreferences used only for external DB path) |
 | **GPS running tracking** | Not started; geolocator removed |
 | **Health Connect sync** | Not started; health package removed |
 | **Personal Best tracking** | Not implemented |
 | **Analytics / charts** | Not implemented |
-| **Data export/import (JSON/CSV)** | Only database file export works |
+| **Data export/import (JSON/CSV)** | Database file export works (share + save); JSON/CSV not yet |
 | **iOS build & deployment** | Not yet built or published |
 | **Web/Edge** | Deprecated — files in `/edge_archive` |
 
@@ -197,43 +224,7 @@ All 5 models with `YYYY/MM/DD` date format:
 
 ## 6. Known Issues
 
-### ⚠️ Windows Build: `cpp_client_wrapper` `.cc` Files Not Regenerated by `flutter pub get`
-
-**Symptoms:**
-```
-error C1083: Cannot open source file: '...\cpp_client_wrapper\core_implementations.cc': No such file or directory
-```
-All C++ compilation fails — the Windows build cannot proceed.
-
-**Root cause:**
-The `windows/flutter/ephemeral/cpp_client_wrapper/*.cc` source files are generated artifacts (gitignored) that should be copied from the Flutter SDK engine cache by `flutter pub get`. On this project's setup, `flutter pub get` regenerates the `include/` subdirectory but **not** the `.cc` files. The build only succeeds when pre-compiled object files are cached in `build/` (hiding the problem). A `flutter clean` exposes it.
-
-**Current workaround (applied successfully in v0.1.0 session):**
-Manually copy the `.cc` files from the Flutter SDK cache after `flutter pub get`:
-```bash
-flutter clean
-flutter pub get
-# pub get doesn't regenerate the .cc files — copy them manually
-SDK_CACHE="/c/Users/krisr/AppData/Roaming/flutter/bin/cache/artifacts/engine/windows-x64/cpp_client_wrapper"
-cp "$SDK_CACHE"/*.cc windows/flutter/ephemeral/cpp_client_wrapper/
-cp -r "$SDK_CACHE/include" windows/flutter/ephemeral/cpp_client_wrapper/
-flutter build windows --release
-```
-The build then succeeds normally.
-
-**Proper fix — investigation plan for next session:**
-
-| # | Investigation step | Details |
-|---|---|---|
-| 1 | **Check `generated_config.cmake`** | Read `windows/flutter/ephemeral/generated_config.cmake` — it's regenerated by `pub get` and should reference the engine artifact paths. If the `cpp_client_wrapper` source path is wrong or missing, this is the root cause. |
-| 2 | **Check Flutter SDK engine cache integrity** | `flutter doctor -v` reports the engine artifact hash. Compare with what's in `bin/cache/artifacts/engine/windows-x64/cpp_client_wrapper/`. If the SDK cache is corrupt, `flutter doctor` or `flutter precache --windows` may fix it. |
-| 3 | **Run `flutter precache --windows`** | Forces re-download of Windows engine artifacts. This should repopulate the SDK cache and may cause `pub get` to correctly copy the `.cc` files on next run. **Try this first** — it's the least invasive fix. |
-| 4 | **Compare with a fresh Flutter project** | `flutter create test_app && cd test_app && flutter pub get` — check if `windows/flutter/ephemeral/cpp_client_wrapper/*.cc` are generated correctly. If they are, the issue is project-specific (likely a stale `ephemeral/` or CMake state). If not, it's an environment/SDK issue. |
-| 5 | **Check `windows/flutter/CMakeLists.txt`** | The CMake build file references `ephemeral/cpp_client_wrapper/` sources. If the glob or include path is wrong, the files won't be found even if physically present. Compare with the fresh project's CMakeLists.txt. |
-| 6 | **Check `windows/CMakeLists.txt` for stale `build/` references** | `flutter clean` wipes `build/` but if `CMakeLists.txt` or a generated `.cmake` caches a path from a previous build, it may point to deleted files. A full `build/` delete + rebuild tests this. |
-| 7 | **Flutter version bump** | Current SDK is 3.41.4 (4 months old). If steps 1–6 don't resolve it, `flutter upgrade` to latest stable may fix a known regression in the ephemeral file generation. |
-
-**Expected outcome:** After the proper fix, the standard build sequence (`flutter clean && flutter pub get && flutter build windows --release`) should work without manual file copying. The workaround above can be removed once confirmed.
+None — the Windows build now succeeds cleanly with the standard sequence (`flutter clean && flutter pub get && flutter build windows --release`). The previous `cpp_client_wrapper` `.cc` file issue has been resolved.
 
 ---
 
@@ -262,9 +253,27 @@ The build then succeeds normally.
 - Removed stale extension-less tracked files from `lib/`
 - Added `archive/**` exclusion to `analysis_options.yaml`
 
-### v1 (Next) — Session Detail & Polish
-- [ ] Session detail screen showing all WeightTraining rows for a session
-- [ ] Edit/delete individual sets or entire sessions
+### v0.1.1 ✅ DONE — External Database Support & Fine-tuning
+- Added `shared_preferences` dependency for persisting the external DB path
+- `DatabaseHelper`: external path support (`setExternalDatabase`, `useInternalDatabase`, `loadPersistedPath`, `_resolvePath`), reuses `_validateV3Database` for validation
+- `DatabaseHelper`: `_fixSessionsUniqueConstraint()` — removes legacy UNIQUE constraint on SESSIONS.Date when loading external DBs
+- `GymRepository`: exposed `isExternal`, `externalDbPath`, `setExternalDatabase`, `useInternalDatabase`
+- Profile screen: new Database Source section (Internal/External mode display, Load/Change/Switch buttons)
+- Profile screen: renamed buttons — "Share Database" (was Export), "Export Database File" (new save dialog), "Import Database (Replace)" (was Import)
+- Profile screen: body stats "Load More" (show 2 by default, expand on tap)
+- Profile screen: fixed external DB display on reopen (calls `loadPersistedPath` before reading `isExternal`)
+- Import-while-external warning dialog
+- Android: added `WRITE_EXTERNAL_STORAGE` + `READ_EXTERNAL_STORAGE` permissions, `requestLegacyExternalStorage`
+- `getDatabasePath()` always returns internal path (import/export never touch the external DB)
+- Archived v0.1.0 source to `archive/v0.1.0/`
+- **"Train to Expand" exercise pattern** — exercises start collapsed; only completed exercises saved
+- **Exercises: modify weight updates existing row** (no more duplicates)
+- **History: modify/delete session** with full edit dialog
+- **Real-time cross-screen updates** via `DataRefreshNotifier` (new ChangeNotifier)
+- **Tab state persistence** — `IndexedStack` in `MainScreen` keeps all tabs alive
+- **Null-safe model `fromMap()`** — handles nullable columns in imported databases
+
+### v1 (Next) — Remaining Polish
 - [ ] Date-range filter and search in History
 - [ ] BMI display in Profile
 - [ ] Persist settings (SharedPreferences)
@@ -293,32 +302,34 @@ The build then succeeds normally.
 
 ```
 lib/
-├── main.dart                          # ✅ Entry point (Provider for GymRepository + TrainingState)
+├── main.dart                          # ✅ Entry point (Provider for GymRepository + TrainingState + DataRefreshNotifier)
 ├── database/
-│   └── database_helper.dart           # ✅ SQLite helper (singleton + FFI + asset copy, schema v3)
+│   └── database_helper.dart           # ✅ SQLite helper (singleton + FFI + asset copy, schema v3, external DB, UNIQUE fix)
 ├── models/
-│   ├── body_part.dart                 # ✅
+│   ├── body_part.dart                 # ✅ (null-safe fromMap)
 │   ├── body_stat.dart                 # ✅ (YYYY/MM/DD dates)
-│   ├── exercise_body_part.dart        # ✅
+│   ├── exercise_body_part.dart        # ✅ (null-safe fromMap)
 │   ├── session.dart                   # ✅ (workout + bodyParts JSON, YYYY/MM/DD)
-│   └── weight_training.dart           # ✅ (YYYY/MM/DD dates)
+│   └── weight_training.dart           # ✅ (YYYY/MM/DD dates, null-safe fromMap)
 ├── repositories/
-│   └── gym_repository.dart            # ✅ Full CRUD + style-filtered queries
+│   └── gym_repository.dart            # ✅ Full CRUD + style-filtered queries + external DB API
 ├── screens/
-│   ├── active_workout_screen.dart     # ✅ Workout form (Workout field + 10 body part chips)
-│   ├── exercises_screen.dart          # ✅ Browse/modify/add with style filtering
-│   ├── history_screen.dart            # ✅ Reverse chronological, workout + parsed body parts
-│   ├── main_screen.dart               # ✅ 4-tab shell
-│   └── profile_screen.dart            # ✅ Body stats add/edit/delete + export
+│   ├── active_workout_screen.dart     # ✅ Workout form (Train-to-Expand pattern, 10 body part chips)
+│   ├── exercises_screen.dart          # ✅ Browse/modify/add with style filtering, real-time refresh
+│   ├── history_screen.dart            # ✅ Reverse chronological, modify/delete session, real-time refresh
+│   ├── main_screen.dart               # ✅ 4-tab shell (IndexedStack — tabs persist)
+│   └── profile_screen.dart            # ✅ Body stats (Load More), export, external DB UI, real-time refresh
 └── state/
-    └── training_state.dart            # ✅ Hypertrophy/strength toggle
+    ├── training_state.dart            # ✅ Hypertrophy/strength toggle
+    └── data_refresh_notifier.dart     # ✅ Cross-screen real-time refresh (v0.1.1)
 
 assets/
 └── databases/
     └── gym_tracker.db                 # ✅ Bundled SQLite database (v3 template)
 
 archive/
-└── v2/                                # ✅ Pre-v0.1.0 source snapshot (DB + lib/ + pubspec.yaml)
+└── v0.0.0/                            # ✅ Pre-v0.1.0 source snapshot
+└── v0.1.0/                            # ✅ Pre-v0.1.1 source snapshot (DB + lib/ + pubspec.yaml)
 
 edge_archive/                           # Archived web/Edge files (deprecated)
 └── web/
@@ -336,7 +347,6 @@ analysis_options.yaml                   # ✅ Flutter analyzer config (excludes 
 ```bash
 flutter clean
 flutter pub get
-# NOTE: See Known Issues (Section 6) if cpp_client_wrapper .cc files are missing after pub get
 flutter build windows --release
 ```
 Output: `build\windows\x64\runner\Release\gym_tracker.exe`
@@ -348,8 +358,6 @@ flutter build apk --release
 Output: `build\app\outputs\flutter-apk\app-release.apk`
 
 ### Verification
-- `flutter analyze` — 4 info lints only (no errors/warnings)
+- `flutter analyze` — 7 info lints only (no errors/warnings)
 - `flutter test` — All tests pass
 - `python analyze_db.py` — Confirms v3 schema: 10 body parts, 43 exercise mappings, Workout + BodyParts columns
-
-> **Important:** If the Windows build fails with `C1083: Cannot open source file` errors for `cpp_client_wrapper/*.cc`, see [Section 6 — Known Issues](#6-known-issues) for the workaround and fix plan.

@@ -17,13 +17,11 @@ class ExerciseBodyPart {
     };
   }
 
-  /// Creates an ExerciseBodyPart object from a database Map.
-  ///
-  /// Handles NULL values gracefully — useful for imported databases.
+  /// Creates an ExerciseBodyPart object from a database Map
   factory ExerciseBodyPart.fromMap(Map<String, dynamic> map) {
     return ExerciseBodyPart(
-      exercise: (map['Exercise'] as String?) ?? '',
-      bodyPart: (map['BodyPart'] as String?) ?? '',
+      exercise: map['Exercise'] as String,
+      bodyPart: map['BodyPart'] as String,
     );
   }
 
