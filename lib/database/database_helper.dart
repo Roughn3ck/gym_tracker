@@ -415,7 +415,7 @@ class DatabaseHelper {
           Date TEXT NOT NULL,
           Workout TEXT,
           BodyParts TEXT,
-          RunDuration REAL,
+          RunDistance REAL,
           RunTime INTEGER,
           SaunaDuration INTEGER,
           BodyWeight REAL,
@@ -426,8 +426,8 @@ class DatabaseHelper {
 
       // Copy all data from the old table
       await db.execute('''
-        INSERT INTO SESSIONS_new (Date, Workout, BodyParts, RunDuration, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other)
-        SELECT Date, Workout, BodyParts, RunDuration, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other FROM SESSIONS
+        INSERT INTO SESSIONS_new (Date, Workout, BodyParts, RunDistance, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other)
+        SELECT Date, Workout, BodyParts, RunDistance, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other FROM SESSIONS
       ''');
 
       // Drop old table and rename new

@@ -4,7 +4,7 @@ class Session {
   final DateTime date;
   final String? workout; // free-text workout description (e.g. "chest and bis")
   final String? bodyParts; // JSON array of canonical body part names, e.g. ["Chest","Biceps"]
-  final double? runDuration; // run distance in km
+  final double? runDistance; // run distance in km
   final int? runTime; // run time in minutes
   final int? saunaDuration; // in minutes
   final double? bodyWeight; // in kg
@@ -16,7 +16,7 @@ class Session {
     required this.date,
     this.workout,
     this.bodyParts,
-    this.runDuration,
+    this.runDistance,
     this.runTime,
     this.saunaDuration,
     this.bodyWeight,
@@ -35,7 +35,7 @@ class Session {
       'Date': '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}',
       'Workout': workout,
       'BodyParts': bodyParts,
-      'RunDuration': runDuration,
+      'RunDistance': runDistance,
       'RunTime': runTime,
       'SaunaDuration': saunaDuration,
       'BodyWeight': bodyWeight,
@@ -51,7 +51,7 @@ class Session {
       date: _parseDate(map['Date'] as String),
       workout: map['Workout'] as String?,
       bodyParts: map['BodyParts'] as String?,
-      runDuration: map['RunDuration'] as double?,
+      runDistance: map['RunDistance'] as double?,
       runTime: map['RunTime'] as int?,
       saunaDuration: map['SaunaDuration'] as int?,
       bodyWeight: map['BodyWeight'] as double?,
@@ -66,7 +66,7 @@ class Session {
     DateTime? date,
     String? workout,
     String? bodyParts,
-    double? runDuration,
+    double? runDistance,
     int? runTime,
     int? saunaDuration,
     double? bodyWeight,
@@ -78,7 +78,7 @@ class Session {
       date: date ?? this.date,
       workout: workout ?? this.workout,
       bodyParts: bodyParts ?? this.bodyParts,
-      runDuration: runDuration ?? this.runDuration,
+      runDistance: runDistance ?? this.runDistance,
       runTime: runTime ?? this.runTime,
       saunaDuration: saunaDuration ?? this.saunaDuration,
       bodyWeight: bodyWeight ?? this.bodyWeight,
@@ -89,7 +89,7 @@ class Session {
 
   @override
   String toString() {
-    return 'Session(id: $id, date: $date, workout: $workout, bodyParts: $bodyParts, runDuration: $runDuration, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
+    return 'Session(id: $id, date: $date, workout: $workout, bodyParts: $bodyParts, runDistance: $runDistance, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
   }
 
   @override
@@ -101,7 +101,7 @@ class Session {
         other.date == date &&
         other.workout == workout &&
         other.bodyParts == bodyParts &&
-        other.runDuration == runDuration &&
+        other.runDistance == runDistance &&
         other.runTime == runTime &&
         other.saunaDuration == saunaDuration &&
         other.bodyWeight == bodyWeight &&
@@ -115,7 +115,7 @@ class Session {
         date.hashCode ^
         workout.hashCode ^
         bodyParts.hashCode ^
-        runDuration.hashCode ^
+        runDistance.hashCode ^
         runTime.hashCode ^
         saunaDuration.hashCode ^
         bodyWeight.hashCode ^

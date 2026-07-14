@@ -274,7 +274,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         date: _selectedDate,
         workout: workoutText.isEmpty ? null : workoutText,
         bodyParts: jsonEncode(_selectedBodyParts.toList()),
-        runDuration: double.tryParse(_runDistanceController.text),
+        runDistance: double.tryParse(_runDistanceController.text),
         runTime: int.tryParse(_runTimeController.text),
         saunaDuration: int.tryParse(_saunaController.text),
         bodyWeight: double.tryParse(_bodyWeightController.text),

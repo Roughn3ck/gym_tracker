@@ -233,8 +233,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 }),
                                 if (session.trainingStyle != null)
                                   Text('Style: ${session.trainingStyle}'),
-                                if (session.runDuration != null)
-                                  Text('Run: ${session.runDuration} km'),
+                                if (session.runDistance != null)
+                                  Text('Run: ${session.runDistance} km'),
                                 if (session.runTime != null)
                                   Text('Run Time: ${session.runTime} min'),
                                 if (session.saunaDuration != null)
@@ -327,7 +327,7 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
     _trainingStyle = s.trainingStyle ?? 'Hypertrophy';
     _workoutController.text = s.workout ?? '';
     _bodyWeightController.text = s.bodyWeight?.toString() ?? '';
-    _runDistanceController.text = s.runDuration?.toString() ?? '';
+    _runDistanceController.text = s.runDistance?.toString() ?? '';
     _runTimeController.text = s.runTime?.toString() ?? '';
     _saunaController.text = s.saunaDuration?.toString() ?? '';
     _notesController.text = s.other ?? '';
@@ -512,7 +512,7 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
                   ? null
                   : _workoutController.text.trim(),
               bodyParts: jsonEncode(_selectedBodyParts.toList()),
-              runDuration: double.tryParse(_runDistanceController.text),
+              runDistance: double.tryParse(_runDistanceController.text),
               runTime: int.tryParse(_runTimeController.text),
               saunaDuration: int.tryParse(_saunaController.text),
               bodyWeight: double.tryParse(_bodyWeightController.text),
