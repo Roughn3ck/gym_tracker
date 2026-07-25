@@ -1,10 +1,10 @@
 # Gym Tracker — Project Status
 
-> **App version: 0.1.1** — DB schema version: **3**
+> **App version: 0.2.0** — DB schema version: **4**
 >
 > **Status: ✅ Working — All four tabs functional, v3 schema with 10 body parts, 43 exercise mappings, external database support, real-time cross-screen updates**
 >
-> The app builds, passes `flutter analyze` (7 info lints only), and the Windows release build succeeds. Ships with a blank `gym_tracker.db` (v3 template) containing 10 body parts and 43 exercise mappings — no personal data. Users can start tracking immediately.
+> The app builds, passes `flutter analyze` (7 info lints only), and the Windows release build succeeds. Ships with a blank `gym_tracker.db` (v4 template) containing 10 body parts and 43 exercise mappings — no personal data. Users can start tracking immediately.
 
 > **Web/Edge Deprecated:** Web/Edge support has been deprecated due to persistent database loading issues with `sqflite_common_ffi_web`. Files archived to `/edge_archive`.
 
@@ -37,10 +37,10 @@ A Flutter-based fitness tracking app targeting both strength and hypertrophy tra
 - **Workout** free-text field for workout description (e.g. "push day", "chest and bis")
 - Body part multi-select via FilterChips (10 categories) — auto-loads relevant exercises
 - **"Train to Expand" exercise pattern** — exercises start collapsed with a "Train" button; tapping expands weight/reps/sets fields; "Complete" collapses to summary; only completed exercises are saved (v0.1.1)
-- Body weight field (auto-filled from last session)
-- Cardio fields: run distance (km), run time (min), sauna duration (min)
+- Body weight field starts blank; helper text shows last recorded weight
+- Cardio fields: multiple runs with distance (km) and pace (`M:SS`/km), sauna duration (min)
 - Free-text notes field
-- Save session (creates SESSIONS row with `Workout` + `BodyParts` JSON + only completed WEIGHT_TRAINING rows)
+- Save session (creates SESSIONS row with `Workout` + `BodyParts` JSON + `Runs` JSON + only completed WEIGHT_TRAINING rows)
 - Reset form button
 - **Real-time updates** — saved sessions appear immediately in History and Exercises tabs (via `DataRefreshNotifier`)
 
@@ -55,10 +55,10 @@ A Flutter-based fitness tracking app targeting both strength and hypertrophy tra
 
 ### Tab 3 — History (Review Sessions) ✅
 - All sessions listed in reverse chronological order (Date DESC)
-- Each card shows: session ID, date, workout description, parsed body parts, training style, run distance/time, sauna, body weight, notes
+- Each card shows: session ID, date, workout description, parsed body parts, training style, runs (distance and pace), sauna, body weight, notes
 - Empty state: "No workout history yet"
 - Refresh via floating action button
-- **Modify session** — edit dialog with all session fields (date, workout, body parts, training style, run distance/time, sauna, body weight, notes)
+- **Modify session** — edit dialog with all session fields (date, workout, body parts, training style, runs, sauna, body weight, notes)
 - **Delete session** — with confirmation dialog
 - **Real-time updates** — new sessions appear immediately after save (via `DataRefreshNotifier`)
 
@@ -110,12 +110,13 @@ All date columns use `YYYY/MM/DD` text format. Dart models normalise slashes to 
 | Date | TEXT | NOT NULL (`YYYY/MM/DD`) |
 | Workout | TEXT | Free-text workout description |
 | BodyParts | TEXT | JSON array of canonical body part names (e.g. `["Chest","Biceps"]`) |
-| RunDuration | REAL | Run distance in km |
-| RunTime | INTEGER | Run time in minutes |
+| RunDistance | REAL | Run distance in km (legacy v3) |
+| RunTime | INTEGER | Run time in minutes (legacy v3) |
 | SaunaDuration | INTEGER | Sauna duration in minutes |
 | BodyWeight | REAL | Body weight in kg |
 | TrainingStyle | TEXT | 'Hypertrophy' or 'Strength' |
 | Other | TEXT | Free-text notes |
+| Runs | TEXT | JSON array of run entries: `[{"distance":2.6,"pace":"6:38"}]` |
 
 ### 3.2 BODY_STATS — Body Measurements
 | Column | Type | Constraints |
@@ -173,10 +174,11 @@ SESSIONS.BodyParts  → JSON array referencing BODY_PARTS.Name
 - Singleton pattern
 - Copies bundled `gym_tracker.db` from assets on first launch
 - FFI initialization for desktop (Windows/macOS/Linux)
-- `_databaseVersion = 3`
+- `_databaseVersion = 4`
+- `onCreate` / `onUpgrade`: creates full v4 schema; v3 → v4 upgrade adds `Runs` column via `ALTER TABLE SESSIONS ADD COLUMN Runs TEXT`
 - `onOpen`: `PRAGMA foreign_keys = ON` only (legacy v1→v2 RunTime migration removed in v0.1.0)
 - External DB support: `setExternalDatabase()`, `useInternalDatabase()`, `loadPersistedPath()`, `_resolvePath()` (v0.1.1)
-- `_fixSessionsUniqueConstraint()` — removes legacy UNIQUE constraint on SESSIONS.Date when loading external DBs
+- `_fixSessionsUniqueConstraint()` — removes legacy UNIQUE constraint on SESSIONS.Date when loading external DBs (v4 schema recreated with `Runs` column)
 - `getDatabasePath()` always returns internal path (import/export never touch external DB)
 - Reuses `_validateV3Database()` for external DB validation
 - Generic CRUD helpers + table introspection methods
@@ -193,7 +195,7 @@ SESSIONS.BodyParts  → JSON array referencing BODY_PARTS.Name
 
 ### Models ✅
 All 5 models with `YYYY/MM/DD` date format and null-safe `fromMap()`:
-- `Session` — fields: `workout` (free-text), `bodyParts` (JSON array string), plus run/cardio/weight/training fields
+- `Session` — fields: `workout` (free-text), `bodyParts` (JSON array string), `runs` (JSON array of run entries), plus run/cardio/weight/training fields
 - `BodyStat`
 - `BodyPart`
 - `ExerciseBodyPart`
@@ -272,6 +274,14 @@ None — the Windows build now succeeds cleanly with the standard sequence (`flu
 - **Real-time cross-screen updates** via `DataRefreshNotifier` (new ChangeNotifier)
 - **Tab state persistence** — `IndexedStack` in `MainScreen` keeps all tabs alive
 - **Null-safe model `fromMap()`** — handles nullable columns in imported databases
+
+### v0.2.0 ✅ DONE — Multiple Runs, Pace, and Body Weight Blank Start
+- Added `Runs` JSON column to `SESSIONS` for multiple run entries per session
+- Replaced single Run Time with per-run Pace field in `M:SS` /km format
+- Body weight field now starts blank with last recorded weight shown as helper text
+- Updated bundled `assets/databases/gym_tracker.db` to v4 via `create_db.py`
+- History tab displays multiple runs with distance and pace; edit dialog supports multiple runs
+- Backward compatible with legacy `RunDistance`/`RunTime` columns
 
 ### v1 (Next) — Remaining Polish
 - [ ] Date-range filter and search in History
@@ -360,4 +370,4 @@ Output: `build\app\outputs\flutter-apk\app-release.apk`
 ### Verification
 - `flutter analyze` — 7 info lints only (no errors/warnings)
 - `flutter test` — All tests pass
-- `python analyze_db.py` — Confirms v3 schema: 10 body parts, 43 exercise mappings, Workout + BodyParts columns
+- `python analyze_db.py` — Confirms v4 schema: 10 body parts, 43 exercise mappings, `Runs` column present

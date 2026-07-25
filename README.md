@@ -2,11 +2,18 @@
 
 A Flutter-based fitness tracking app for logging strength and hypertrophy workouts, monitoring body stats, and reviewing session history. Ships with a pre-populated exercise catalogue — no personal data, works out of the box.
 
-**Current release: `v0.1.1`** (DB schema `v3`) — see [What's New](#whats-new) below.
+**Current release: `v0.2.0`** (DB schema `v4`) — see [What's New](#whats-new) below.
 
 ---
 
 ## What's New
+
+### v0.2.0 — Multiple Runs, Pace, and Body Weight Blank Start
+
+- **Multiple Runs**: Log multiple separate runs per session with individual distance and pace. Perfect for run-to-gym, train, run-home days.
+- **Pace Field**: Run time has been replaced with pace in `M:SS` format (e.g. `6:38` = 6 min 38 sec per km). Enter pace per kilometre instead of total run time.
+- **Body Weight Blank Start**: The Body Weight field no longer auto-fills with your last recorded weight. It now shows your last weight as helper text below the field, so you don't accidentally re-enter an old weight on a day you didn't weigh in.
+- **Schema v4**: Added a `Runs` JSON column to the `SESSIONS` table. Each entry stores `distance` (km) and `pace` (`M:SS`). Legacy `RunDistance` and `RunTime` columns are kept for backward compatibility — old sessions still display correctly.
 
 ### v0.1.1 — External Database Support
 
@@ -123,20 +130,19 @@ This is the main screen for recording a workout session.
    - **Date** — Tap the date field to open a date picker. Defaults to today.
    - **Workout** — Free-text description of the workout (e.g. `"chest and bis"`, `"push day"`). Optional.
    - **Body Parts** — Tap one or more filter chips (Quads, Hamstrings, Calves, Glutes, Chest, Biceps, Triceps, Back, Shoulders, Abs) to select which muscle groups you're training. Selecting body parts automatically loads the relevant exercises below.
-   - **Body Weight (kg)** — Enter your current body weight. Auto-filled from your last session if available.
+    - **Body Weight (kg)** — Enter your current body weight. Helper text shows your last recorded weight; the field starts blank so you only fill it when you actually weigh in.
 
-3. **Exercises** — Once you select body parts, exercise cards appear with fields for:
+  3. **Exercises** — Once you select body parts, exercise cards appear with fields for:
    - **Weight (kg)** — Pre-filled with your last recorded weight for the current training style (if any). Shows "Last: X kg" hint.
    - **Reps** — Pre-filled from your last session.
    - **Sets** — Pre-filled from your last session.
    - Leave the weight blank to skip saving that exercise.
 
-4. **Cardio & Recovery** — Optional fields:
-   - **Run Dist (km)** — Distance run.
-   - **Run Time (min)** — Time taken.
-   - **Sauna Duration (min)** — Time in the sauna.
+  4. **Cardio & Recovery** — Optional fields:
+    - **Runs** — Add one or more runs. Each run has a distance in km and an optional pace in `M:SS` per km (e.g. `6:38`). Tap **+ Add Run** to log multiple runs.
+    - **Sauna Duration (min)** — Time in the sauna.
 
-5. **Notes** — Free-text field for anything else (e.g., "Run 2: 3km, 15min").
+  5. **Notes** — Free-text field for anything else.
 
 6. **Save Session** — Tap the blue **Save Session** button. You'll see a "Session saved!" confirmation. Tap **Reset Form** to clear everything and start fresh.
 
@@ -160,7 +166,7 @@ Browse the exercise catalogue, view and update weights, and add new exercises.
 
 View all past workout sessions in reverse chronological order (newest first).
 
-- Each session card shows: Session ID, date, workout description, body parts trained, training style, run distance/time, sauna duration, body weight, and any notes.
+- Each session card shows: Session ID, date, workout description, body parts trained, training style, runs (distance and pace), sauna duration, body weight, and any notes.
 - Tap the **refresh button** (floating action button) to reload history.
 - If no sessions exist yet, you'll see "No workout history yet".
 - Session detail view (drill-down into individual exercises within a session) is planned for a future release.
@@ -237,8 +243,9 @@ The app uses a SQLite database (`gym_tracker.db`) bundled as an asset. On first 
 | Date | TEXT | `YYYY/MM/DD` format |
 | Workout | TEXT | Free-text workout description (e.g. "chest and bis") |
 | BodyParts | TEXT | JSON array of canonical body part names (e.g. `["Chest","Biceps"]`) |
-| RunDuration | REAL | Run distance in km |
-| RunTime | INTEGER | Run time in minutes |
+| RunDistance | REAL | Run distance in km (legacy v3; kept for backward compatibility) |
+| RunTime | INTEGER | Run time in minutes (legacy v3; kept for backward compatibility) |
+| Runs | TEXT | JSON array of run entries: `[{"distance":2.6,"pace":"6:38"}]` |
 | SaunaDuration | INTEGER | Sauna time in minutes |
 | BodyWeight | REAL | Body weight in kg |
 | TrainingStyle | TEXT | 'Hypertrophy' or 'Strength' |
@@ -318,7 +325,7 @@ archive/
 └── v0.0.0/                        # Pre-v0.1.0 source snapshot
 └── v0.1.0/                        # Pre-v0.1.1 source snapshot
 
-create_db.py                       # Regenerates assets/databases/gym_tracker.db from schema
+create_db.py                       # Regenerates assets/databases/gym_tracker.db (v4 schema + seed)
 analyze_db.py                      # Inspects the bundled database (schema + row counts)
 ```
 

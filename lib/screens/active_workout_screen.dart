@@ -25,10 +25,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   final Set<String> _selectedBodyParts = {};
   final _workoutController = TextEditingController();
   final _bodyWeightController = TextEditingController();
-  final _runDistanceController = TextEditingController();
-  final _runTimeController = TextEditingController();
   final _saunaController = TextEditingController();
   final _notesController = TextEditingController();
+  List<_RunEntry> _runEntries = [];
 
   // Exercise data
   List<BodyPart> _allBodyParts = [];
@@ -39,9 +38,12 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   bool _isLoading = false;
   int _lastRefreshCount = 0;
 
+  static final RegExp _paceRegex = RegExp(r'^\d{1,2}:[0-5]\d$');
+
   @override
   void initState() {
     super.initState();
+    _runEntries = [_RunEntry()];
     _loadInitialData();
   }
 
@@ -49,8 +51,9 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   void dispose() {
     _workoutController.dispose();
     _bodyWeightController.dispose();
-    _runDistanceController.dispose();
-    _runTimeController.dispose();
+    for (final entry in _runEntries) {
+      entry.dispose();
+    }
     _saunaController.dispose();
     _notesController.dispose();
     for (final entry in _exerciseEntries) {
@@ -70,9 +73,6 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         setState(() {
           _allBodyParts = bodyParts;
           _lastBodyWeight = lastWeight;
-          if (lastWeight != null) {
-            _bodyWeightController.text = lastWeight.toString();
-          }
           _isLoading = false;
         });
       }
@@ -260,6 +260,17 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
     final repository = Provider.of<GymRepository>(context, listen: false);
 
     try {
+      // Validate pace format for any non-empty pace fields
+      for (final run in _runEntries) {
+        final pace = run.paceController.text.trim();
+        if (pace.isNotEmpty && !_paceRegex.hasMatch(pace)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid pace "$pace". Use M:SS format (e.g. 6:38).')),
+          );
+          return;
+        }
+      }
+
       // Auto-complete any currently expanded exercise before saving
       for (final entry in _exerciseEntries) {
         if (entry.state == ExerciseEntryState.expanded) {
@@ -270,16 +281,27 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       String notes = _notesController.text.trim();
 
       final workoutText = _workoutController.text.trim();
+
+      // Build runs JSON from the run entry list
+      final runsList = <Map<String, dynamic>>[];
+      for (final run in _runEntries) {
+        final dist = double.tryParse(run.distanceController.text.trim());
+        final pace = run.paceController.text.trim();
+        if (dist != null && dist > 0) {
+          runsList.add({'distance': dist, 'pace': pace.isNotEmpty ? pace : null});
+        }
+      }
+      final runsJson = runsList.isNotEmpty ? jsonEncode(runsList) : null;
+
       final session = Session(
         date: _selectedDate,
         workout: workoutText.isEmpty ? null : workoutText,
         bodyParts: jsonEncode(_selectedBodyParts.toList()),
-        runDistance: double.tryParse(_runDistanceController.text),
-        runTime: int.tryParse(_runTimeController.text),
         saunaDuration: int.tryParse(_saunaController.text),
         bodyWeight: double.tryParse(_bodyWeightController.text),
         trainingStyle: trainingState.currentModeName,
         other: notes.isNotEmpty ? notes : null,
+        runs: runsJson,
       );
       await repository.insertSession(session);
       if (!mounted) return;
@@ -319,17 +341,33 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       _selectedDate = DateTime.now();
       _selectedBodyParts.clear();
       _workoutController.clear();
-      _runDistanceController.clear();
-      _runTimeController.clear();
+      for (final entry in _runEntries) {
+        entry.dispose();
+      }
+      _runEntries = [_RunEntry()];
       _saunaController.clear();
       _notesController.clear();
+      _bodyWeightController.clear();
       for (final entry in _exerciseEntries) {
         entry.dispose();
       }
       _exerciseEntries.clear();
       _availableExercises.clear();
-      if (_lastBodyWeight != null) {
-        _bodyWeightController.text = _lastBodyWeight.toString();
+    });
+  }
+
+  void _addRunEntry() {
+    setState(() {
+      _runEntries.add(_RunEntry());
+    });
+  }
+
+  void _removeRunEntry(int index) {
+    setState(() {
+      _runEntries[index].dispose();
+      _runEntries.removeAt(index);
+      if (_runEntries.isEmpty) {
+        _runEntries = [_RunEntry()];
       }
     });
   }
@@ -417,10 +455,13 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                   // Body weight
                   TextFormField(
                     controller: _bodyWeightController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Body Weight (kg)',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       suffixText: 'kg',
+                      helperText: _lastBodyWeight != null
+                          ? 'Last: ${_lastBodyWeight} kg'
+                          : null,
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
@@ -439,33 +480,13 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                   // Cardio & Recovery
                   _buildSectionTitle('Cardio & Recovery'),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _runDistanceController,
-                          decoration: const InputDecoration(
-                            labelText: 'Run Dist',
-                            border: OutlineInputBorder(),
-                            suffixText: 'km',
-                          ),
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _runTimeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Run Time',
-                            border: OutlineInputBorder(),
-                            suffixText: 'min',
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
+                  for (int i = 0; i < _runEntries.length; i++)
+                    _buildRunEntry(i),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _addRunEntry,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Run'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -513,6 +534,60 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildRunEntry(int index) {
+    final run = _runEntries[index];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Run ${index + 1}',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: run.distanceController,
+                decoration: const InputDecoration(
+                  labelText: 'Run Dist',
+                  border: OutlineInputBorder(),
+                  suffixText: 'km',
+                  isDense: true,
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: run.paceController,
+                decoration: const InputDecoration(
+                  labelText: 'Pace',
+                  border: OutlineInputBorder(),
+                  suffixText: 'min/km',
+                  isDense: true,
+                ),
+                keyboardType: TextInputType.text,
+              ),
+            ),
+            if (_runEntries.length > 1) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => _removeRunEntry(index),
+                icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                tooltip: 'Remove run',
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+      ],
     );
   }
 
@@ -729,6 +804,21 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         ),
       ],
     );
+  }
+}
+
+/// Helper class to manage a single run entry's controllers.
+class _RunEntry {
+  final TextEditingController distanceController;
+  final TextEditingController paceController;
+
+  _RunEntry()
+      : distanceController = TextEditingController(),
+        paceController = TextEditingController();
+
+  void dispose() {
+    distanceController.dispose();
+    paceController.dispose();
   }
 }
 

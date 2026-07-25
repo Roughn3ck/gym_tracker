@@ -6,7 +6,7 @@
 
 Flutter-based fitness tracking app for logging strength and hypertrophy workouts, body stats, and session history. SQLite persistence with a clean repository pattern and Provider state management.
 
-**Current version:** `0.1.1+1` (pubspec.yaml) — DB schema `v3`
+**Current version:** `0.2.0+1` (pubspec.yaml) — DB schema `v4`
 
 ## Tech Stack
 
@@ -47,11 +47,11 @@ lib/
     └── data_refresh_notifier.dart     # Broadcast signal — all screens reload on change
 ```
 
-## Database Schema (v3)
+## Database Schema (v4)
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| `SESSIONS` | Workout session records | `ID`, `Date` (TEXT `YYYY/MM/DD`), `Workout` (TEXT), `BodyParts` (JSON array TEXT), `RunDistance` (REAL km), `RunTime` (INTEGER min), `SaunaDuration` (INTEGER min), `BodyWeight` (REAL kg), `TrainingStyle` (TEXT), `Other` (TEXT) |
+| `SESSIONS` | Workout session records | `ID`, `Date` (TEXT `YYYY/MM/DD`), `Workout` (TEXT), `BodyParts` (JSON array TEXT), `RunDistance` (REAL km, legacy v3), `RunTime` (INTEGER min, legacy v3), `SaunaDuration` (INTEGER min), `BodyWeight` (REAL kg), `TrainingStyle` (TEXT), `Other` (TEXT), `Runs` (TEXT, JSON array of `{distance, pace}`) |
 | `BODY_STATS` | Body measurements | `ID`, `Date`, `Weight_kg`, `Waist_inches`, `Neck_inches`, `Notes` |
 | `BODY_PARTS` | 10 canonical muscle groups | `ID`, `Name` |
 | `EXERCISE_BODY_PARTS` | Exercise → body part mapping | `Exercise` (TEXT), `BodyPart` (TEXT) — composite PK, CHECK constraint enforces 10 canonical names |
@@ -64,6 +64,7 @@ lib/
 - **Training styles are independent** — `WEIGHT_TRAINING` stores separate rows for Hypertrophy vs Strength. Adding the same exercise with a different style = INSERT (never UPDATE). `EXERCISE_BODY_PARTS` is style-independent.
 - **`DatabaseHelper` is a singleton** — `_database` is cached. External DB mode persists the path in `SharedPreferences` under key `external_db_path`.
 - **`getDatabasePath()` always returns the internal path** — export/import/share always target the internal DB, never the external one.
+- **Backward compatibility** — old sessions continue to use `RunDistance`/`RunTime`; new sessions use the `Runs` JSON column. The `Runs` column takes priority for display when non-null/non-empty.
 - **External DB validation** — `_validateV3Database()` checks required tables, SESSIONS columns (Workout + BodyParts signature), and exact 10 canonical body part names before switching.
 
 ### The 10 Canonical Body Parts
@@ -146,14 +147,15 @@ flutter build apk --release
 - Semantic versioning in `pubspec.yaml`: `MAJOR.MINOR.PATCH+BUILD`
 - DB schema version tracked in `database_helper.dart` (`_databaseVersion`)
 - Update `README.md` and `STATUS.md` when introducing new versions
-- Bundled `assets/databases/gym_tracker.db` is always a blank v3 template (no personal data)
+- Bundled `assets/databases/gym_tracker.db` is always a blank v4 template (no personal data)
 
 ## File Inventory
 
 | File | Purpose |
 |------|---------|
 | `lib/` | Application source (15 Dart files) |
-| `assets/databases/gym_tracker.db` | Blank v3 DB template (bundled with app) |
+| `assets/databases/gym_tracker.db` | Blank v4 DB template (bundled with app) |
+| `create_db.py` | Regenerates the bundled v4 schema DB with seed data |
 | `android/` | Android platform code |
 | `ios/` | iOS platform code |
 | `linux/` | Linux platform code |

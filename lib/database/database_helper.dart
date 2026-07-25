@@ -20,12 +20,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// [externalDbPath].
 class DatabaseHelper {
   static const String _databaseName = 'gym_tracker.db';
-  static const int _databaseVersion = 3;
+  static const int _databaseVersion = 4;
 
   /// SharedPreferences key for persisting the external DB path.
   static const String _prefsKeyExternalDbPath = 'external_db_path';
 
-  /// The 10 canonical v3 body part names. A valid v3 import must contain
+  /// The 10 canonical v4 body part names. A valid v4 import must contain
   /// exactly these in BODY_PARTS (order-independent). Kept in sync with the
   /// CHECK constraint in create_db.py and the bundled asset.
   static const List<String> canonicalBodyParts = [
@@ -140,16 +140,92 @@ class DatabaseHelper {
     final db = await openDatabase(
       path,
       version: _databaseVersion,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
       onOpen: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
     );
 
     // Fix legacy UNIQUE constraint on SESSIONS.Date if present.
-    // This is a no-op for databases created from the v3 asset template.
+    // This is a no-op for databases created from the v4 asset template.
     await _fixSessionsUniqueConstraintIfPresent(db);
 
     return db;
+  }
+
+  /// Creates the v4 schema for a brand-new database.
+  Future<void> _onCreate(Database db, int version) async {
+    await _createV4Schema(db);
+  }
+
+  /// Handles schema upgrades. Currently only v3 -> v4 is supported.
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion == 3 && newVersion == 4) {
+      await db.execute('ALTER TABLE SESSIONS ADD COLUMN Runs TEXT');
+    }
+  }
+
+  /// Full v4 schema for fresh databases.
+  Future<void> _createV4Schema(Database db) async {
+    await db.execute('''
+      CREATE TABLE SESSIONS (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Date TEXT NOT NULL,
+        Workout TEXT,
+        BodyParts TEXT,
+        RunDistance REAL,
+        RunTime INTEGER,
+        SaunaDuration INTEGER,
+        BodyWeight REAL,
+        TrainingStyle TEXT,
+        Other TEXT,
+        Runs TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE BODY_STATS (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Date TEXT NOT NULL,
+        Weight_kg REAL,
+        Waist_inches REAL,
+        Neck_inches REAL,
+        Notes TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE WEIGHT_TRAINING (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Date TEXT,
+        TrainingStyle TEXT,
+        Exercises TEXT,
+        Weight TEXT,
+        Reps INTEGER,
+        Sets INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE BODY_PARTS (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Name TEXT NOT NULL
+      )
+    ''');
+
+    final bpList = canonicalBodyParts.map((bp) => "'$bp'").join(', ');
+    await db.execute('''
+      CREATE TABLE EXERCISE_BODY_PARTS (
+        Exercise TEXT NOT NULL,
+        BodyPart TEXT NOT NULL CHECK (BodyPart IN ($bpList)),
+        PRIMARY KEY (Exercise, BodyPart)
+      )
+    ''');
+
+    for (final bp in canonicalBodyParts) {
+      await db.insert('BODY_PARTS', {'Name': bp});
+    }
   }
 
   /// Get the **internal** database file path (for export/import).
@@ -320,13 +396,14 @@ class DatabaseHelper {
     return importSuccessMessage;
   }
 
-  /// Validates that the SQLite file at [sourcePath] is a genuine v3 Gym Tracker
+  /// Validates that the SQLite file at [sourcePath] is a genuine v4 Gym Tracker
   /// database, using a temporary read-only connection. Returns `null` if valid,
   /// or a user-facing error string if not.
   ///
   /// Checks: required tables exist, SESSIONS has `Workout` + `BodyParts`
-  /// columns (the v3 signature), and BODY_PARTS contains exactly the 10
-  /// canonical names.
+  /// columns (the v4 signature), and BODY_PARTS contains exactly the 10
+  /// canonical names. The `Runs` column is preferred but not required, so
+  /// existing v3 databases that already have Workout + BodyParts still pass.
   Future<String?> _validateV3Database(String sourcePath) async {
     final sourceFile = File(sourcePath);
     if (!await sourceFile.exists()) {
@@ -361,11 +438,11 @@ class DatabaseHelper {
         }
       }
 
-      // (b) v3 signature: SESSIONS must have both Workout and BodyParts.
+      // (b) v4 signature: SESSIONS must have both Workout and BodyParts.
       final sessionCols = await candidate.rawQuery('PRAGMA table_info(SESSIONS)');
       final colNames = sessionCols.map((r) => r['name'] as String).toSet();
       if (!colNames.contains('Workout') || !colNames.contains('BodyParts')) {
-        return 'This database is not a Gym Tracker v3 database '
+        return 'This database is not a Gym Tracker v4 database '
             '(missing Workout/BodyParts columns).';
       }
 
@@ -396,7 +473,7 @@ class DatabaseHelper {
   /// on the same date.
   ///
   /// Called from [_initDatabase] after the DB is opened. For internal databases
-  /// (created from the v3 asset template), this is a no-op since there's no
+  /// (created from the v4 asset template), this is a no-op since there's no
   /// UNIQUE constraint.
   Future<void> _fixSessionsUniqueConstraintIfPresent(Database db) async {
     try {
@@ -420,14 +497,15 @@ class DatabaseHelper {
           SaunaDuration INTEGER,
           BodyWeight REAL,
           TrainingStyle TEXT,
-          Other TEXT
+          Other TEXT,
+          Runs TEXT
         )
       ''');
 
       // Copy all data from the old table
       await db.execute('''
-        INSERT INTO SESSIONS_new (Date, Workout, BodyParts, RunDistance, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other)
-        SELECT Date, Workout, BodyParts, RunDistance, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other FROM SESSIONS
+        INSERT INTO SESSIONS_new (Date, Workout, BodyParts, RunDistance, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other, Runs)
+        SELECT Date, Workout, BodyParts, RunDistance, RunTime, SaunaDuration, BodyWeight, TrainingStyle, Other, Runs FROM SESSIONS
       ''');
 
       // Drop old table and rename new

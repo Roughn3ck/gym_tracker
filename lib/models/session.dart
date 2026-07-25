@@ -4,12 +4,13 @@ class Session {
   final DateTime date;
   final String? workout; // free-text workout description (e.g. "chest and bis")
   final String? bodyParts; // JSON array of canonical body part names, e.g. ["Chest","Biceps"]
-  final double? runDistance; // run distance in km
-  final int? runTime; // run time in minutes
+  final double? runDistance; // run distance in km (legacy v3 column)
+  final int? runTime; // run time in minutes (legacy v3 column)
   final int? saunaDuration; // in minutes
   final double? bodyWeight; // in kg
   final String? trainingStyle;
   final String? other;
+  final String? runs; // JSON array of run entries, e.g. [{"distance":2.6,"pace":"6:38"}]
 
   Session({
     this.id,
@@ -22,6 +23,7 @@ class Session {
     this.bodyWeight,
     this.trainingStyle,
     this.other,
+    this.runs,
   });
 
   /// Parses a date string that may be in YYYY/MM/DD or ISO 8601 format
@@ -41,6 +43,7 @@ class Session {
       'BodyWeight': bodyWeight,
       'TrainingStyle': trainingStyle,
       'Other': other,
+      'Runs': runs,
     };
   }
 
@@ -57,6 +60,7 @@ class Session {
       bodyWeight: map['BodyWeight'] as double?,
       trainingStyle: map['TrainingStyle'] as String?,
       other: map['Other'] as String?,
+      runs: map['Runs'] as String?,
     );
   }
 
@@ -72,6 +76,7 @@ class Session {
     double? bodyWeight,
     String? trainingStyle,
     String? other,
+    String? runs,
   }) {
     return Session(
       id: id ?? this.id,
@@ -84,12 +89,13 @@ class Session {
       bodyWeight: bodyWeight ?? this.bodyWeight,
       trainingStyle: trainingStyle ?? this.trainingStyle,
       other: other ?? this.other,
+      runs: runs ?? this.runs,
     );
   }
 
   @override
   String toString() {
-    return 'Session(id: $id, date: $date, workout: $workout, bodyParts: $bodyParts, runDistance: $runDistance, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other)';
+    return 'Session(id: $id, date: $date, workout: $workout, bodyParts: $bodyParts, runDistance: $runDistance, runTime: $runTime, saunaDuration: $saunaDuration, bodyWeight: $bodyWeight, trainingStyle: $trainingStyle, other: $other, runs: $runs)';
   }
 
   @override
@@ -106,7 +112,8 @@ class Session {
         other.saunaDuration == saunaDuration &&
         other.bodyWeight == bodyWeight &&
         other.trainingStyle == trainingStyle &&
-        other.other == this.other;
+        other.other == this.other &&
+        other.runs == runs;
   }
 
   @override
@@ -120,6 +127,7 @@ class Session {
         saunaDuration.hashCode ^
         bodyWeight.hashCode ^
         trainingStyle.hashCode ^
-        other.hashCode;
+        other.hashCode ^
+        runs.hashCode;
   }
 }

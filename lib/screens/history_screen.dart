@@ -81,6 +81,39 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  /// Builds the list of run display widgets for a session card.
+  /// Priority: Runs JSON > legacy RunDistance/RunTime.
+  List<Widget> _buildRunDisplay(Session session) {
+    final widgets = <Widget>[];
+    if (session.runs != null && session.runs!.isNotEmpty) {
+      try {
+        final runs = jsonDecode(session.runs!);
+        if (runs is List && runs.isNotEmpty) {
+          for (int i = 0; i < runs.length; i++) {
+            final r = runs[i];
+            final dist = r['distance'];
+            final pace = r['pace'];
+            if (pace != null && pace.toString().isNotEmpty) {
+              widgets.add(Text('Run ${i + 1}: $dist km @ $pace/km'));
+            } else {
+              widgets.add(Text('Run ${i + 1}: $dist km'));
+            }
+          }
+          return widgets;
+        }
+      } catch (_) {
+        // Fall through to legacy display
+      }
+    }
+    if (session.runDistance != null) {
+      widgets.add(Text('Run: ${session.runDistance} km'));
+    }
+    if (session.runTime != null) {
+      widgets.add(Text('Run Time: ${session.runTime} min'));
+    }
+    return widgets;
+  }
+
   Future<void> _modifySession(Session session) async {
     final result = await showDialog<Session>(
       context: context,
@@ -233,10 +266,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 }),
                                 if (session.trainingStyle != null)
                                   Text('Style: ${session.trainingStyle}'),
-                                if (session.runDistance != null)
-                                  Text('Run: ${session.runDistance} km'),
-                                if (session.runTime != null)
-                                  Text('Run Time: ${session.runTime} min'),
+                                ..._buildRunDisplay(session),
                                 if (session.saunaDuration != null)
                                   Text('Sauna: ${session.saunaDuration} min'),
                                 if (session.bodyWeight != null)
@@ -294,6 +324,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
+/// Helper class to manage a single run entry's controllers.
+class _RunEntry {
+  final TextEditingController distanceController;
+  final TextEditingController paceController;
+
+  _RunEntry({String distance = '', String pace = ''})
+      : distanceController = TextEditingController(text: distance),
+        paceController = TextEditingController(text: pace);
+
+  void dispose() {
+    distanceController.dispose();
+    paceController.dispose();
+  }
+}
+
 /// Dialog for editing an existing session
 class _EditSessionDialog extends StatefulWidget {
   final Session existing;
@@ -311,13 +356,14 @@ class _EditSessionDialog extends StatefulWidget {
 class _EditSessionDialogState extends State<_EditSessionDialog> {
   final _workoutController = TextEditingController();
   final _bodyWeightController = TextEditingController();
-  final _runDistanceController = TextEditingController();
-  final _runTimeController = TextEditingController();
   final _saunaController = TextEditingController();
   final _notesController = TextEditingController();
   late DateTime _selectedDate;
   late String _trainingStyle;
   late Set<String> _selectedBodyParts;
+  final List<_RunEntry> _runEntries = [];
+
+  static final RegExp _paceRegex = RegExp(r'^\d{1,2}:[0-5]\d$');
 
   @override
   void initState() {
@@ -327,8 +373,6 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
     _trainingStyle = s.trainingStyle ?? 'Hypertrophy';
     _workoutController.text = s.workout ?? '';
     _bodyWeightController.text = s.bodyWeight?.toString() ?? '';
-    _runDistanceController.text = s.runDistance?.toString() ?? '';
-    _runTimeController.text = s.runTime?.toString() ?? '';
     _saunaController.text = s.saunaDuration?.toString() ?? '';
     _notesController.text = s.other ?? '';
     // Parse body parts from JSON
@@ -341,17 +385,72 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
         }
       } catch (_) {}
     }
+    _loadRunsFromSession(s);
+  }
+
+  void _loadRunsFromSession(Session s) {
+    _runEntries.clear();
+    if (s.runs != null && s.runs!.isNotEmpty) {
+      try {
+        final runs = jsonDecode(s.runs!);
+        if (runs is List) {
+          for (final r in runs) {
+            final distance = r['distance']?.toString() ?? '';
+            final pace = r['pace']?.toString() ?? '';
+            _runEntries.add(_RunEntry(
+              distance: distance,
+              pace: pace,
+            ));
+          }
+        }
+      } catch (_) {}
+    }
+    // If no runs JSON loaded, fall back to legacy RunDistance/RunTime.
+    if (_runEntries.isEmpty && (s.runDistance != null || s.runTime != null)) {
+      String pace = '';
+      if (s.runDistance != null && s.runDistance! > 0 && s.runTime != null) {
+        final totalSeconds = s.runTime! * 60;
+        final paceSeconds = (totalSeconds / s.runDistance!).round();
+        final minutes = paceSeconds ~/ 60;
+        final seconds = paceSeconds % 60;
+        pace = '$minutes:${seconds.toString().padLeft(2, '0')}';
+      }
+      _runEntries.add(_RunEntry(
+        distance: s.runDistance?.toString() ?? '',
+        pace: pace,
+      ));
+    }
+    if (_runEntries.isEmpty) {
+      _runEntries.add(_RunEntry());
+    }
   }
 
   @override
   void dispose() {
     _workoutController.dispose();
     _bodyWeightController.dispose();
-    _runDistanceController.dispose();
-    _runTimeController.dispose();
+    for (final entry in _runEntries) {
+      entry.dispose();
+    }
     _saunaController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _addRunEntry() {
+    setState(() {
+      _runEntries.add(_RunEntry());
+    });
+  }
+
+  void _removeRunEntry(int index) {
+    setState(() {
+      _runEntries[index].dispose();
+      _runEntries.removeAt(index);
+      if (_runEntries.isEmpty) {
+        _runEntries.add(_RunEntry());
+      }
+    });
   }
 
   Future<void> _pickDate() async {
@@ -368,6 +467,60 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildRunEntry(int index) {
+    final run = _runEntries[index];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Run ${index + 1}',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: run.distanceController,
+                decoration: const InputDecoration(
+                  labelText: 'Run Dist',
+                  border: OutlineInputBorder(),
+                  suffixText: 'km',
+                  isDense: true,
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: run.paceController,
+                decoration: const InputDecoration(
+                  labelText: 'Pace',
+                  border: OutlineInputBorder(),
+                  suffixText: 'min/km',
+                  isDense: true,
+                ),
+                keyboardType: TextInputType.text,
+              ),
+            ),
+            if (_runEntries.length > 1) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => _removeRunEntry(index),
+                icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                tooltip: 'Remove run',
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
   }
 
   @override
@@ -448,33 +601,12 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
                   const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _runDistanceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Run Dist',
-                      border: OutlineInputBorder(),
-                      suffixText: 'km',
-                    ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _runTimeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Run Time',
-                      border: OutlineInputBorder(),
-                      suffixText: 'min',
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              ],
+            for (int i = 0; i < _runEntries.length; i++) _buildRunEntry(i),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _addRunEntry,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Run'),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -505,6 +637,27 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
         ),
         FilledButton(
           onPressed: () {
+            // Validate pace format for any non-empty pace fields
+            for (final run in _runEntries) {
+              final pace = run.paceController.text.trim();
+              if (pace.isNotEmpty && !_paceRegex.hasMatch(pace)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Invalid pace "$pace". Use M:SS format (e.g. 6:38).')),
+                );
+                return;
+              }
+            }
+
+            final runsList = <Map<String, dynamic>>[];
+            for (final run in _runEntries) {
+              final dist = double.tryParse(run.distanceController.text.trim());
+              final pace = run.paceController.text.trim();
+              if (dist != null && dist > 0) {
+                runsList.add({'distance': dist, 'pace': pace.isNotEmpty ? pace : null});
+              }
+            }
+            final runsJson = runsList.isNotEmpty ? jsonEncode(runsList) : null;
+
             final session = Session(
               id: widget.existing.id,
               date: _selectedDate,
@@ -512,14 +665,15 @@ class _EditSessionDialogState extends State<_EditSessionDialog> {
                   ? null
                   : _workoutController.text.trim(),
               bodyParts: jsonEncode(_selectedBodyParts.toList()),
-              runDistance: double.tryParse(_runDistanceController.text),
-              runTime: int.tryParse(_runTimeController.text),
+              runDistance: widget.existing.runDistance,
+              runTime: widget.existing.runTime,
               saunaDuration: int.tryParse(_saunaController.text),
               bodyWeight: double.tryParse(_bodyWeightController.text),
               trainingStyle: _trainingStyle,
               other: _notesController.text.trim().isNotEmpty
                   ? _notesController.text.trim()
                   : null,
+              runs: runsJson,
             );
             Navigator.of(context).pop(session);
           },
